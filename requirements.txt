@@ -1,0 +1,10 @@
+scikit-learn
+numpy
+scipy
+matplotlib
+jupyter
+ipython
+scikit-image
+h5py
+nose
+imagen
