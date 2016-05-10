@@ -9,7 +9,8 @@ from functools import partial
 from copy import deepcopy
 from .util import make_2d_input_matrix
 
-FunctionTransformer = partial(FunctionTransformer, validate=False) # turn off all validation.
+FunctionTransformer = partial(FunctionTransformer, validate=False)  # turn off all validation.
+
 
 def check_valid_steps(steps):
     pass
@@ -31,19 +32,6 @@ def extract_image_patch(img, row_index, col_index):
     return img[np.ix_(row_index, col_index)]
 
 
-def get_central_portion(images, patchsize):
-    new_image_list = []
-    for img in images:
-        rowsthis, colsthis = img.shape[0], img.shape[1]
-        crows = rowsthis / 2.0
-        ccols = colsthis / 2.0
-        # for new image (canvas), use integer to index.
-        row_index, col_index = get_patch_location(crows, ccols, patchsize)
-        new_image_list.append(extract_image_patch(img, row_index, col_index))
-
-    return np.array(new_image_list)  # return as a 3d array.
-
-
 def get_grid_portions(images, row_grid, col_grid, patchsize, offset='c'):
     new_image_list = []
     for img in images:
@@ -59,7 +47,7 @@ def get_grid_portions(images, row_grid, col_grid, patchsize, offset='c'):
             row_index, col_index = get_patch_location(crows + r_pos, ccols + c_pos, patchsize)
             new_image_list.append(extract_image_patch(img, row_index, col_index))
 
-    return np.array(new_image_list)  # return as a 2d array.
+    return np.array(new_image_list)  # return as a 3d array.
 
 
 def step_transformer_dispatch(step, step_pars):
@@ -78,7 +66,7 @@ def step_transformer_dispatch(step, step_pars):
                 row_grid -= row_grid.mean()
                 col_grid -= col_grid.mean()
                 row_grid, col_grid = np.meshgrid(row_grid, col_grid, indexing='ij')
-                row_grid = row_grid.ravel(order=grid_order)  # TODO add expansion order in config.
+                row_grid = row_grid.ravel(order=grid_order)
                 col_grid = col_grid.ravel(order=grid_order)
                 return FunctionTransformer(partial(get_grid_portions, row_grid=row_grid,
                                                    col_grid=col_grid,
@@ -89,9 +77,10 @@ def step_transformer_dispatch(step, step_pars):
 
         elif sampling_type == 'clip':
             clip_origin = step_pars['clip_origin']
+            clip_offset = step_pars['clip_offset']
             if clip_origin == 'center':
-                return FunctionTransformer(partial(get_grid_portions, row_grid=[0],
-                                                   col_grid=[0],
+                return FunctionTransformer(partial(get_grid_portions, row_grid=[clip_offset[0]],
+                                                   col_grid=[clip_offset[1]],
                                                    patchsize=patchsize,
                                                    offset='c'))
             else:
@@ -140,8 +129,15 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
                                  'random_pixelshiftx': 0,
                                  'random_seed': 0,
                                  # params for clip
-                                 'clip_origin': 'center',  # or a 2-tuple specifying row and column
-                                 # params for grid
+                                 'clip_origin': 'center',  # or a 2-tuple specifying row and column.
+                                 #
+                                 'clip_offset': (0, 0),  # or a 2-tuple specifying row and column, relative to
+                                 # clip origin.
+                                 # this can be combined with another function generating origin positions of different
+                                 # centers on the grid.
+                                 'clip_random': False, # TODO implement random selection for clip mode.
+                                 'clip_random_numpatch': None,
+                                 'clip_random_maxjitter': None, # the maximum jitter size +/- maxjitter around center.
                                  'grid_origin': 'center',
                                  'grid_spacing': None,  # pixels between centers.
                                  'grid_gridsize': (None, None),  # a 2-tuple specifying how many
