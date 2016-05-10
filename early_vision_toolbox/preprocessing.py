@@ -1,13 +1,15 @@
 # coding=utf-8
-"""preprocessing pipelines for (B&W) images"""
+"""preprocessing pipelines for (single channel) images"""
 
 from __future__ import division, print_function, absolute_import
 import numpy as np
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.pipeline import Pipeline
 from functools import partial
+from copy import deepcopy
 from .util import make_2d_input_matrix
 
+FunctionTransformer = partial(FunctionTransformer, validate=False) # turn off all validation.
 
 def check_valid_steps(steps):
     pass
@@ -68,6 +70,7 @@ def step_transformer_dispatch(step, step_pars):
         if sampling_type == 'grid':
             grid_origin = step_pars['grid_origin']
             grid_spacing = step_pars['grid_spacing']
+            grid_order = step_pars['grid_order']  # should be 'C' or 'F'
             row_grid_num, col_grid_num = step_pars['grid_gridsize']
             row_grid = np.linspace(0, (row_grid_num - 1) * grid_spacing, row_grid_num)
             col_grid = np.linspace(0, (col_grid_num - 1) * grid_spacing, col_grid_num)
@@ -75,14 +78,24 @@ def step_transformer_dispatch(step, step_pars):
                 row_grid -= row_grid.mean()
                 col_grid -= col_grid.mean()
                 row_grid, col_grid = np.meshgrid(row_grid, col_grid, indexing='ij')
-                row_grid = row_grid.ravel(order='F')  # TODO add expansion order in config.
-                col_grid = col_grid.ravel(order='F')
+                row_grid = row_grid.ravel(order=grid_order)  # TODO add expansion order in config.
+                col_grid = col_grid.ravel(order=grid_order)
+                return FunctionTransformer(partial(get_grid_portions, row_grid=row_grid,
+                                                   col_grid=col_grid,
+                                                   patchsize=patchsize,
+                                                   offset='c'))
             else:
                 raise NotImplementedError("type {} not supported!".format(grid_origin))
 
         elif sampling_type == 'clip':
-            assert step_pars['clip_origin'] == 'center'
-            return FunctionTransformer(partial(get_central_portion, patchsize=patchsize))
+            clip_origin = step_pars['clip_origin']
+            if clip_origin == 'center':
+                return FunctionTransformer(partial(get_grid_portions, row_grid=[0],
+                                                   col_grid=[0],
+                                                   patchsize=patchsize,
+                                                   offset='c'))
+            else:
+                raise NotImplementedError("type {} not supported!".format(clip_origin))
         else:
             raise NotImplementedError("type {} not supported!".format(sampling_type))
     elif step == 'removeDC':
@@ -118,7 +131,7 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
 
     if steps is None:
         # default steps are those described as "canonical preprocessing" in the Natural Image Statistics book.
-        steps = {'sampling', 'removeDC', 'PCA'}
+        steps = {'sampling', 'flattening', 'removeDC', 'PCA'}
     default_pars = {'sampling': {'type': 'random',  # 'all', or 'grid', or 'clip'
                                  'patchsize': None,  # for everything
                                  # params for 'random'
@@ -131,7 +144,8 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
                                  # params for grid
                                  'grid_origin': 'center',
                                  'grid_spacing': None,  # pixels between centers.
-                                 'grid_gridsize': (None, None)  # a 2-tuple specifying how many
+                                 'grid_gridsize': (None, None),  # a 2-tuple specifying how many
+                                 'grid_order': 'C'
                                  },
                     'PCA': {'epsilon': 0.1,
                             'n_components': None  # keep all components.
@@ -156,7 +170,7 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
     # construct a pars with only relevant steps.
     real_pars = {key: default_pars[key] for key in steps}
     for key in pars:
-        real_pars.update(pars[key])
+        real_pars[key].update(pars[key])
 
     # now let's first implement two things for Tang's data and LCA alaska snow.
     # 1. clip and grid sampling.
@@ -168,4 +182,4 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
             pipeline_step_list.append((candidate_step,
                                        step_transformer_dispatch(candidate_step, real_pars[candidate_step])))
 
-    return Pipeline(pipeline_step_list)
+    return Pipeline(pipeline_step_list), deepcopy(real_pars)
