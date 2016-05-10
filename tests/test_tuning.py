@@ -3,6 +3,7 @@ import unittest
 import h5py
 import numpy as np
 from early_vision_toolbox import tuning
+from early_vision_toolbox.util import transpose_c_and_f
 
 
 class MyTestCase(unittest.TestCase):
@@ -20,10 +21,7 @@ class MyTestCase(unittest.TestCase):
         ica_optphase = grp.attrs['ica_optphase']
 
         # now shuffle this Wica. 1024x256
-        wica = wica.T
-        wica = wica.reshape(256, 32, 32)
-        wica = np.transpose(wica, (0, 2, 1))
-        wica = wica.reshape(256, 1024)
+        wica = transpose_c_and_f(wica.T)
 
         # get result
         result = tuning.find_optimal_paras_rf(w=wica, legacy=True)

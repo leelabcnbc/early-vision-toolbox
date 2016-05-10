@@ -16,7 +16,7 @@ class MyTestCase(unittest.TestCase):
         # get image
         images = grp['images'][:]
         # use this method for maximum accuracy.  'lasso_cd' is much faster but a little less accurate.
-        model = sparse_coding.LassoSparseCodingNeuronBank(w, algorithm='lasso_lars')
+        model = sparse_coding.LassoSparseCodingNeuronBank(w, algorithm='spams')
         lambda_list = grp.attrs['lambda_list']
         cost_list = grp.attrs['cost_list']
 
@@ -33,12 +33,8 @@ class MyTestCase(unittest.TestCase):
             cost_this = model.last_cost * images.shape[0]
             cost_this_ref = cost_list[idx]
             response_this_ref = response_ref_list[idx]
-            cost_diff = np.abs(cost_this - cost_this_ref)
-            resp_diff = np.abs(response_this_ref - response_this).max()
-            # print('cost diff {} - {} = {}'.format(cost_this, cost_this_ref, cost_diff))
-            # print('max response diff {}'.format(resp_diff))
-            self.assertTrue(cost_diff < 1e-6)
-            self.assertTrue(resp_diff < 1e-3)
+            assert np.allclose(response_this_ref, response_this)
+            assert np.allclose(cost_this_ref, cost_this)
 
 
 if __name__ == '__main__':

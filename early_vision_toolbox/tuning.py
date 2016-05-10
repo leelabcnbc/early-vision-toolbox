@@ -62,7 +62,7 @@ class LinearSquareNeuronBank(NeuronBank):
             response = (np.dot(self.w, imgs_array.T))
         else:
             response = (np.dot(self.w[neuron_idx:(neuron_idx + 1), :], imgs_array.T))
-        return response
+        return response.T
 
 
 _default_parameters = {
@@ -213,7 +213,7 @@ def find_optimal_paras_rf(w, freqvalues=None, orvalues=None, phasevalues=None, l
     freq_or_pair_list = [(f, o) for f in freqvalues for o in orvalues]
     grating_sin, grating_cos = quadrature_gratings(freq_or_pair_list, filtersize, legacy=legacy)
     response = (w.predict(grating_sin)) ** 2 + (w.predict(grating_cos)) ** 2
-    response_max = np.argmax(response, axis=1)
+    response_max = np.argmax(response, axis=0)
 
     # create the result array
     result_dtype = [('optx', np.float64),  # gravity center of x (column)

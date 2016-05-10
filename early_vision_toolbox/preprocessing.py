@@ -92,7 +92,8 @@ def step_transformer_dispatch(step, step_pars):
     elif step == 'unitVar':
         # to be exactly the same as in adam coate's stuff.
         return FunctionTransformer(
-            lambda x: x / np.sqrt(np.var(x, axis=1, ddof=step_pars['ddof'])) + step_pars['epsilon'])
+            lambda x: x / np.sqrt(np.var(x, axis=1, ddof=step_pars['ddof'],
+                                         keepdims=True) + step_pars['epsilon']))
     elif step == 'flattening':
         return FunctionTransformer(make_2d_input_matrix)
     else:

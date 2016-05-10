@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.decomposition import sparse_encode
 from .interface import NeuronBank
 from .util import make_2d_input_matrix
+from spams import lasso
 
 
 class LassoSparseCodingNeuronBank(NeuronBank):
@@ -36,6 +37,7 @@ class LassoSparseCodingNeuronBank(NeuronBank):
             w = w.astype(np.float64)  # use float64
         self.w = w
         self.__filtersize = filtersize
+        assert np.isscalar(penalty_lambda)
         self._lambda = penalty_lambda
         self.last_cost = np.nan
         self.algorithm = algorithm
@@ -81,6 +83,7 @@ class LassoSparseCodingNeuronBank(NeuronBank):
             _lambda = self._lambda
         else:
             _lambda = penalty_lambda
+        assert np.isscalar(_lambda)
 
         if algorithm is None:
             _algorithm = self.algorithm
@@ -97,7 +100,14 @@ class LassoSparseCodingNeuronBank(NeuronBank):
         #
         # in the code there's also a subtle detail, where alpha is divided by number of pixels in each stimulus.
         # I haven't figured that out, but seems that's simply a detail for using ElasticNet to do this.
-        response = sparse_encode(imgs_array, dict_to_use, alpha=_lambda, algorithm=_algorithm, max_iter=10000)
+        if _algorithm in ['lasso_lars', 'lasso_cd']:
+            response = sparse_encode(imgs_array, dict_to_use, alpha=_lambda, algorithm=_algorithm, max_iter=10000)
+        else:
+            assert _algorithm == 'spams'
+            #print(imgs_array.dtype, dict_to_use.dtype, _lambda.shape)
+            response = lasso(np.asfortranarray(imgs_array.T), D=np.asfortranarray(dict_to_use.T), lambda1=_lambda,
+                             mode=2)
+            response = response.T.toarray()
         # this can be used for debugging, for comparison with SPAMS.
         # notice here I give per sample cost.
         self.last_cost = 0.5 * np.sum((imgs_array - np.dot(response, dict_to_use)) ** 2) + _lambda * np.abs(response).sum()

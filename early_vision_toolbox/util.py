@@ -12,3 +12,22 @@ def make_2d_input_matrix(imgs):
         imgs_array = np.atleast_2d(imgs)
 
     return imgs_array
+
+def transpose_c_and_f(w):
+    """ convert row (C) major and column (F) major arrangement of input features back and forth.
+
+    Parameters
+    ----------
+    w
+
+    Returns
+    -------
+
+    """
+    n_filter, filtersizesq = w.shape
+    filtersize = np.int(np.sqrt(filtersizesq))
+    assert filtersize ** 2 == filtersizesq, "filter must be originally square!"
+    w = w.reshape(n_filter, filtersize, filtersize)
+    w = np.transpose(w, (0, 2, 1))  # change between row and column.
+    w = w.reshape(n_filter, filtersizesq)
+    return w
