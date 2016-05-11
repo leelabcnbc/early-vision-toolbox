@@ -47,7 +47,13 @@ def sparsity_measure_rolls(x, normalize=True, clip=True):
         x_new[x_new < 0] = 0
 
     # compute sparsity.
-    sparsity_raw = ((np.mean(x_new))**2)/np.mean(x_new*x_new)
+    divisor = np.mean(x_new*x_new)
+    if divisor == 0:
+        sparsity_raw = 1.0
+        #print('hit!')
+        #print(np.all(x==0))
+    else:
+        sparsity_raw = ((np.mean(x_new))**2)/divisor
 
     if normalize:
         norm_factor = 1.0 - 1.0/x_new.size

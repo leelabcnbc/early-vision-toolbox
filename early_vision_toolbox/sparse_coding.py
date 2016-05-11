@@ -107,7 +107,7 @@ class LassoSparseCodingNeuronBank(NeuronBank):
             #print(imgs_array.dtype, dict_to_use.dtype, _lambda.shape)
             response = lasso(np.asfortranarray(imgs_array.T), D=np.asfortranarray(dict_to_use.T), lambda1=_lambda,
                              mode=2)
-            response = response.T.toarray()
+            response = response.T.toarray()  # because lasso returns sparse matrix...
         # this can be used for debugging, for comparison with SPAMS.
         # notice here I give per sample cost.
         self.last_cost = 0.5 * np.sum((imgs_array - np.dot(response, dict_to_use)) ** 2) + _lambda * np.abs(response).sum()
