@@ -3,6 +3,8 @@
 
 from __future__ import division, print_function, absolute_import
 import numpy as np
+import h5py
+
 
 def make_2d_input_matrix(imgs):
     # make flat, if not ndarray or at least 3d.
@@ -12,6 +14,7 @@ def make_2d_input_matrix(imgs):
         imgs_array = np.atleast_2d(imgs)
 
     return imgs_array
+
 
 def transpose_c_and_f(w):
     """ convert row (C) major and column (F) major arrangement of input features back and forth.
@@ -31,3 +34,25 @@ def transpose_c_and_f(w):
     w = np.transpose(w, (0, 2, 1))  # change between row and column.
     w = w.reshape(n_filter, filtersizesq)
     return w
+
+
+class HDF5Iter(object):
+    def __init__(self, filename, datasetlist):
+        self.filename = filename
+        self.datasetlist = datasetlist
+
+    def __iter__(self):
+        def fetch_one_dataset(filename, datasetname):
+            f = h5py.File(filename, 'r')
+            result = f[datasetname][:]
+            f.close()
+            return result
+
+        return (fetch_one_dataset(self.filename, dataset) for dataset in self.datasetlist)
+
+    def __len__(self):
+        return len(self.datasetlist)
+
+
+def make_hdf5_iter_class(filename, datasetlist):
+    return HDF5Iter(filename, datasetlist)
