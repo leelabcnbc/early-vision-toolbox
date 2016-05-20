@@ -8,7 +8,7 @@ from early_vision_toolbox import sparse_coding
 class MyTestCase(unittest.TestCase):
     def test_lasso(self):
         # first, load the file
-        f = h5py.File('sparse_coding_ref/sparse_coding_ref.hdf5', 'r+')
+        f = h5py.File('sparse_coding_ref/sparse_coding_ref.hdf5', 'r')
         # get the filter
         grp = f['spams/mexLasso/mode2']
         w = grp['W'][:]
@@ -23,7 +23,7 @@ class MyTestCase(unittest.TestCase):
         response_ref_list = []
         for idx in range(cost_list.size):
             response_this_ref = grp['response/' + str(idx + 1)][:]
-            assert np.all(np.logical_not(np.isnan(response_this_ref)))
+            self.assertTrue(np.all( np.isfinite(response_this_ref)))
             response_ref_list.append(response_this_ref)
         f.close()
 
@@ -33,8 +33,8 @@ class MyTestCase(unittest.TestCase):
             cost_this = model.last_cost * images.shape[0]
             cost_this_ref = cost_list[idx]
             response_this_ref = response_ref_list[idx]
-            assert np.allclose(response_this_ref, response_this)
-            assert np.allclose(cost_this_ref, cost_this)
+            self.assertTrue(np.allclose(response_this_ref, response_this))
+            self.assertTrue(np.allclose(cost_this_ref, cost_this))
 
 
 if __name__ == '__main__':

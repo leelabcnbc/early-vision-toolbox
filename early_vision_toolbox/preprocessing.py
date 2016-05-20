@@ -8,6 +8,7 @@ from sklearn.pipeline import Pipeline
 from functools import partial
 from copy import deepcopy
 from .util import make_2d_input_matrix
+from numpy.fft import fft2, ifft2, fftshift, ifftshift
 
 FunctionTransformer = partial(FunctionTransformer, validate=False)  # turn off all validation.
 
@@ -35,7 +36,7 @@ def extract_image_patch(img, row_index, col_index):
 def get_grid_portions(images, row_grid, col_grid, patchsize, offset='c'):
     new_image_list = []
     for img in images:
-        rowsthis, colsthis = img.shape[0], img.shape[1]
+        rowsthis, colsthis = img.shape  # this will implicitly check shape is 2-tuple.
         # for new image (canvas), use integer to index.
         if offset == 'c':
             crows = rowsthis / 2.0
@@ -48,6 +49,40 @@ def get_grid_portions(images, row_grid, col_grid, patchsize, offset='c'):
             new_image_list.append(extract_image_patch(img, row_index, col_index))
 
     return np.array(new_image_list)  # return as a 3d array.
+
+
+def whiten_olsh_lee(images, f_0=None, central_clip=(None, None)):
+    new_image_list = []
+    for image in images:
+        new_image_list.append(whiten_olsh_lee_inner(image, f_0, central_clip))
+    return np.array(new_image_list)  # return as a 3d array.
+
+
+def whiten_olsh_lee_inner(image, f_0=None, central_clip=(None, None)):
+    height, width = image.shape
+    assert height % 2 == 0 and width % 2 == 0, "image must have even size!"
+    image = image - image.mean()
+    std_im = image.std(ddof=1)
+    assert std_im != 0, "constant image unsupported!"
+    image /= std_im
+
+    fx, fy = np.meshgrid(np.arange(-height / 2, height / 2), np.arange(-width / 2, width / 2), indexing='ij')
+    rho = np.sqrt(fx * fx + fy * fy)
+    if f_0 is None:
+        f_0 = 0.4 * (height + width) / 2
+    filt = rho * np.exp(-((rho / f_0) ** 4))
+
+    im_f = fft2(image)
+
+    fft_filtered_old = im_f * fftshift(filt)
+    fft_filtered_old = fftshift(fft_filtered_old)
+    if central_clip != (None, None):
+        fft_filtered_old = fft_filtered_old[height / 2 - central_clip[0] / 2:height / 2 + central_clip[0] / 2,
+                           width / 2 - central_clip[1] / 2:width / 2 + central_clip[1] / 2]
+    im_out = np.real(ifft2(ifftshift(fft_filtered_old)))
+    std_im_out = im_out.std(ddof=1)
+    return im_out/std_im_out
+
 
 
 def step_transformer_dispatch(step, step_pars):
@@ -96,6 +131,9 @@ def step_transformer_dispatch(step, step_pars):
                                          keepdims=True) + step_pars['epsilon']))
     elif step == 'flattening':
         return FunctionTransformer(make_2d_input_matrix)
+    elif step == 'oneOverFWhitening':
+        return FunctionTransformer(partial(whiten_olsh_lee, f_0=step_pars['f_0'],
+                                           central_clip=step_pars['central_clip']))
     else:
         raise NotImplementedError('step {} is not implemented yet'.format(step))
 
@@ -115,7 +153,7 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
     a scikit learn Pipeline object ready to use.
 
     """
-    canonical_order = ['normalizeRange', 'gammaCorrection', 'oneOverFWhitening',
+    canonical_order = ['normalizeRange', 'gammaCorrection', 'logTransform', 'oneOverFWhitening',
                        'sampling', 'flattening', 'removeDC', 'unitVar', 'PCA', 'ZCA']
     __step_set = frozenset(canonical_order)
 
@@ -136,9 +174,9 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
                                  # clip origin.
                                  # this can be combined with another function generating origin positions of different
                                  # centers on the grid.
-                                 'clip_random': False, # TODO implement random selection for clip mode.
+                                 'clip_random': False,  # TODO implement random selection for clip mode.
                                  'clip_random_numpatch': None,
-                                 'clip_random_maxjitter': None, # the maximum jitter size +/- maxjitter around center.
+                                 'clip_random_maxjitter': None,  # the maximum jitter size +/- maxjitter around center.
                                  'grid_origin': 'center',
                                  'grid_spacing': None,  # pixels between centers.
                                  'grid_gridsize': (None, None),  # a 2-tuple specifying how many
@@ -149,7 +187,11 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
                             },
                     'unitVar': {'epsilon': 10, 'ddof': 1},
                     'ZCA': {},
-                    'oneOverFWhitening': {},
+                    'oneOverFWhitening': {'f_0': None,  # cut off frequency, in cycle / image. 0.4*mean(H, W) by default
+                                          'central_clip': (None, None)
+                                          # clip the central central_clip[0] x central_clip[1] part in the frequency
+                                          # domain. by default, don't do anything.
+                                          },
                     'removeDC': {},
                     'gammaCorrection': {},
                     'normalizeRange': {},
