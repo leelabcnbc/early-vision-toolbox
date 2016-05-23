@@ -51,15 +51,18 @@ def get_grid_portions(images, row_grid, col_grid, patchsize, offset='c'):
     return np.array(new_image_list)  # return as a 3d array.
 
 
-def whiten_olsh_lee(images, f_0=None, central_clip=(None, None), normalize_pre=True, normalize_post=True):
+def whiten_olsh_lee(images, f_0=None, central_clip=(None, None), normalize_pre=True, normalize_post=True,
+                    no_filter=False):
     print("doing 1 over f whitening...")
     new_image_list = []
     for image in images:
-        new_image_list.append(whiten_olsh_lee_inner(image, f_0, central_clip, normalize_pre, normalize_post))
+        new_image_list.append(whiten_olsh_lee_inner(image, f_0, central_clip, normalize_pre, normalize_post,
+                                                    no_filter))
     return np.array(new_image_list)  # return as a 3d array.
 
 
-def whiten_olsh_lee_inner(image, f_0=None, central_clip=(None, None), normalize_pre=True, normalize_post=True):
+def whiten_olsh_lee_inner(image, f_0=None, central_clip=(None, None), normalize_pre=True, normalize_post=True,
+                          no_filter=False):
     height, width = image.shape
     assert height % 2 == 0 and width % 2 == 0, "image must have even size!"
     if normalize_pre:
@@ -75,8 +78,11 @@ def whiten_olsh_lee_inner(image, f_0=None, central_clip=(None, None), normalize_
     filt = rho * np.exp(-((rho / f_0) ** 4))
 
     im_f = fft2(image)
-
-    fft_filtered_old = im_f * fftshift(filt)
+    if not no_filter:
+        fft_filtered_old = im_f * ifftshift(filt)
+    else:  # hack to only lower frequency response.
+        print('no real filtering!')
+        fft_filtered_old = im_f
     fft_filtered_old = fftshift(fft_filtered_old)
     if central_clip != (None, None):
         fft_filtered_old = fft_filtered_old[height // 2 - central_clip[0] // 2:height // 2 + central_clip[0] // 2,
@@ -113,16 +119,35 @@ def getdata_imagearray(images, patchsize, numpatches, buff=0, pixelshiftx=0, see
             fixed_locations_single = True
         else:
             fixed_locations_single = False
+        rng_state = None
     else:
         fixed_locations_flag = False
         fixed_locations_single = True  # just convention.
+        rng_state = np.random.RandomState(seed)
+
+    if not fixed_locations_flag:
+        sample_per_image = int(np.floor((1.0 * numpatches) / len(images)))
+    else:
+        sample_per_image = None
 
     for idx, image in enumerate(images):
         print("[{}/{}]".format(idx + 1, len(images)))
         if fixed_locations_flag:
             locations_this = fixed_locations[0] if fixed_locations_single else fixed_locations[idx]
         else:
-            raise NotImplementedError('non fixed location not implemented')
+            height, width = image.shape
+            # determine how many points to sample.
+            if idx + 1 < len(images):
+                sample_this_image = sample_per_image
+            else:
+                assert idx + 1 == len(images)
+                sample_this_image = numpatches - idx * sample_per_image
+                assert sample_this_image >= sample_per_image
+            locations_this = np.zeros((sample_this_image, 2), dtype=np.uint16)
+            locations_this[:, 0] = buff + rng_state.randint(low=0, high=height - 2 * buff - patchsize + 1,
+                                                            size=(sample_this_image,))
+            locations_this[:, 1] = pixelshiftx + buff + rng_state.randint(low=0, high=width - 2 * buff - patchsize + 1,
+                                                                          size=(sample_this_image,))
 
         # do patch extraction
         assert locations_this.ndim == 2 and locations_this.shape[1] == 2
@@ -191,7 +216,8 @@ def step_transformer_dispatch(step, step_pars):
         return FunctionTransformer(partial(whiten_olsh_lee, f_0=step_pars['f_0'],
                                            central_clip=step_pars['central_clip'],
                                            normalize_pre=step_pars['normalize_pre'],
-                                           normalize_post=step_pars['normalize_post']))
+                                           normalize_post=step_pars['normalize_post'],
+                                           no_filter=step_pars['no_filter']))
     elif step == 'logTransform':
         return FunctionTransformer(partial(log_transformer, bias=step_pars['bias'], epsilon=step_pars['epsilon']))
     else:
@@ -247,14 +273,15 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
                     'PCA': {'epsilon': 0.1,
                             'n_components': None  # keep all components.
                             },
-                    'unitVar': {'epsilon': 10, 'ddof': 1},
+                    'unitVar': {'epsilon': 0.001, 'ddof': 1},
                     'ZCA': {},
                     'oneOverFWhitening': {'f_0': None,  # cut off frequency, in cycle / image. 0.4*mean(H, W) by default
                                           'central_clip': (None, None),
                                           # clip the central central_clip[0] x central_clip[1] part in the frequency
                                           # domain. by default, don't do anything.
                                           'normalize_pre': True,  # do DC removing + unit var before whitening
-                                          'normalize_post': True  # unit var after whitening, in H Lee's implementation.
+                                          'normalize_post': True, # unit var after whitening, in H Lee's implementation.
+                                          'no_filter': False  # useful when only want to do central_clip.
                                           },
                     'removeDC': {},
                     'gammaCorrection': {},
