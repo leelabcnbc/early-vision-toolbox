@@ -7,6 +7,7 @@ from scipy.stats import spearmanr
 from joblib import Parallel, delayed
 import time
 
+
 def compute_rdm(X, noise_level=None, rng_state=None):
     if noise_level is None:
         noise_level = 0.0
@@ -30,7 +31,7 @@ def rdm_similarity(ref_rdms, rdm):
     -------
 
     """
-    ref_rdms = np.atleast_2d(np.array(ref_rdms))
+    ref_rdms = np.atleast_2d(np.array(ref_rdms, copy=False))
     assert len(ref_rdms.shape) == 2
     rdm = np.atleast_2d(rdm.ravel())
     rdm_similarities = spearmanr(ref_rdms, rdm, axis=1).correlation[-1, :-1]
@@ -40,7 +41,9 @@ def rdm_similarity(ref_rdms, rdm):
 def rdm_similarity_batch(ref_rdms, model_rdms, parallel=False, n_jobs=4, timing=True):
     t = time.time()
     if parallel:
-        result = Parallel(n_jobs=n_jobs, verbose=5)(delayed(rdm_similarity)(ref_rdms, rdm) for rdm in model_rdms)
+        # disable memmap, due to <https://github.com/numpy/numpy/issues/6750>
+        result = Parallel(n_jobs=n_jobs, verbose=5, max_nbytes=None)(
+            delayed(rdm_similarity)(ref_rdms, rdm) for rdm in model_rdms)
     else:
         result = [rdm_similarity(ref_rdms, rdm) for rdm in model_rdms]
     elapsed = time.time() - t
