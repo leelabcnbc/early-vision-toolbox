@@ -56,3 +56,10 @@ class HDF5Iter(object):
 
 def make_hdf5_iter_class(filename, datasetlist):
     return HDF5Iter(filename, datasetlist)
+
+
+def normalize_vector_inplace(x):
+    x -= x.mean()
+    a = x.std()
+    if a != 0:
+        x /= a
