@@ -57,7 +57,6 @@ def fastsvd(M):
         for i in xrange(h):
             S[i] = fastnorm(V[i])
             V[i,:] = V[i] / S[i]
-            
     return U, S, V
 
 def gabor2d(gsw, gsh, gx0, gy0, wfreq, worient, wphase, shape):
