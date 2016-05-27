@@ -11,10 +11,15 @@ Key sub-operations performed in a simple V1-like model
 from PIL import Image
 import scipy as N
 import scipy.signal
+import numpy as np
 
 #conv = scipy.signal.convolve
 # change to fft convolve
 conv = scipy.signal.fftconvolve
+if conv is scipy.signal.fftconvolve:
+    print('use fftconvolve for legacy')
+else:
+    print('use convolve for legacy')
 
 # -------------------------------------------------------------------------
 def v1s_norm(hin, kshape, threshold):
@@ -35,7 +40,7 @@ def v1s_norm(hin, kshape, threshold):
       hout -- a normalized 3-dimensional array (width X height X depth)
       
     """
-    
+
     eps = 1e-5
     kh, kw = kshape
     dtype = hin.dtype
@@ -45,13 +50,13 @@ def v1s_norm(hin, kshape, threshold):
     hin_h, hin_w, hin_d = hin.shape
     hout_h = hin_h - kh + 1
     hout_w = hin_w - kw + 1
-    hout_d = hin_d    
+    hout_d = hin_d
     hout = N.empty((hout_h, hout_w, hout_d), 'f')
 
     # -- compute numerator (hnum) and divisor (hdiv)
     # sum kernel
     hin_d = hin.shape[-1]
-    kshape3d = list(kshape) + [hin_d]            
+    kshape3d = list(kshape) + [hin_d]
     ker = N.ones(kshape3d, dtype=dtype)
     size = ker.size
 
@@ -66,18 +71,18 @@ def v1s_norm(hin, kshape, threshold):
     hs = hout_h
     ws = hout_w
     hsum = conv(hsrc, ker, 'valid').astype(dtype)
-    hnum = hsrc[ys:ys+hs, xs:xs+ws] - (hsum/size)
-    val = (hssq - (hsum**2.)/size)
-    N.putmask(val, val<0, 0) # to avoid negative sqrt
-    hdiv = val ** (1./2) + eps
-
+    hnum = hsrc[ys:ys + hs, xs:xs + ws] - (hsum / size)
+    val = (hssq - (hsum ** 2.) / size)
+    N.putmask(val, val < 0, 0)  # to avoid negative sqrt
+    hdiv = val ** (1. / 2) + eps
     # -- apply normalization
     # 'volume' threshold
-    N.putmask(hdiv, hdiv < (threshold+eps), 1.)
+    N.putmask(hdiv, hdiv < (threshold + eps), 1.)
     result = (hnum / hdiv)
-    
+
     hout[:] = result
     return hout
+
 
 # -------------------------------------------------------------------------
 def v1s_filter(hin, filterbank):
@@ -103,10 +108,11 @@ def v1s_filter(hin, filterbank):
         row0, col0 = vectors[0]
         result = conv(conv(hin[:], row0, 'same'), col0, 'same')
         for row, col in vectors[1:]:
-            result += conv(conv(hin[:], row, 'same'), col, 'same')                  
-        hout[:,:,i] = result
+            result += conv(conv(hin[:], row, 'same'), col, 'same')
+        hout[:, :, i] = result
 
     return hout
+
 
 # -------------------------------------------------------------------------
 def v1s_dimr(hin, lsum_ksize, outshape):
@@ -130,11 +136,12 @@ def v1s_dimr(hin, lsum_ksize, outshape):
     aux = N.empty(hin.shape, dtype)
     k = N.ones((lsum_ksize), 'f')
     for d in xrange(aux.shape[2]):
-        aux[:,:,d] = conv(conv(hin[:,:,d], k[N.newaxis,:], 'same'), k[:,N.newaxis], 'same')
-        
+        aux[:, :, d] = conv(conv(hin[:, :, d], k[N.newaxis, :], 'same'), k[:, N.newaxis], 'same')
+
     # -- resample output
     hout = sresample(aux, outshape)
     return hout
+
 
 # -------------------------------------------------------------------------
 def sresample(src, outshape):
@@ -148,16 +155,15 @@ def sresample(src, outshape):
        hout -- resulting n-dimensional array
     
     """
-    
+
     inh, inw = inshape = src.shape[:2]
     outh, outw = outshape
-    hslice = (N.arange(outh) * (inh-1.)/(outh-1.)).round().astype(int)
-    wslice = (N.arange(outw) * (inw-1.)/(outw-1.)).round().astype(int)
-    hout = src[hslice, :][:, wslice]    
+    hslice = (N.arange(outh) * (inh - 1.) / (outh - 1.)).round().astype(int)
+    wslice = (N.arange(outw) * (inw - 1.) / (outw - 1.)).round().astype(int)
+    hout = src[hslice, :][:, wslice]
     return hout.copy()
-    
-    
-    
+
+
 # -------------------------------------------------------------------------
 def get_image(img_fname, max_edge):
     """ Return a resized image as a numpy array
@@ -170,17 +176,17 @@ def get_image(img_fname, max_edge):
       imga -- result
     
     """
-    
+
     # -- open image
-    img = Image.open(img_fname)                
+    img = Image.open(img_fname)
     iw, ih = img.size
 
     # -- resize so that the biggest edge is max_edge (keep aspect ratio)
     if iw > ih:
         new_iw = max_edge
-        new_ih = int(round(1.* max_edge * ih/iw))
+        new_ih = int(round(1. * max_edge * ih / iw))
     else:
-        new_iw = int(round(1.* max_edge * iw/ih))
+        new_iw = int(round(1. * max_edge * iw / ih))
         new_ih = max_edge
     img = img.resize((new_iw, new_ih), Image.BICUBIC)
 
@@ -212,19 +218,20 @@ def rephists(hin, division, nfeatures):
     """
 
     hin_h, hin_w, hin_d = hin.shape
-    nzones = hin_d * division**2
+    nzones = hin_d * division ** 2
     nbins = nfeatures / nzones
-    sx = (hin_w-1.)/division
-    sy = (hin_h-1.)/division
-    fvector = N.zeros((nfeatures), 'f')
+    sx = (hin_w - 1.) / division
+    sy = (hin_h - 1.) / division
+    fvector = N.zeros((nfeatures), np.float32)
     hists = []
     for d in xrange(hin_d):
-        h = [N.histogram(hin[j*sy:(j+1)*sy,i*sx:(i+1)*sx,d], bins=nbins)[0].ravel()
+        # add int() to suppress errors.
+        h = [N.histogram(hin[int(j * sy):int((j + 1) * sy), int(i * sx):int((i + 1) * sx), d], bins=nbins)[0].ravel()
              for i in xrange(division)
              for j in xrange(division)
              ]
         hists += [h]
 
-    hists = N.array(hists, 'f').ravel()    
+    hists = N.array(hists, np.float32).ravel()
     fvector[:hists.size] = hists
     return fvector

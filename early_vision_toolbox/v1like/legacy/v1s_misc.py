@@ -22,8 +22,8 @@ def _get_gabor_filters(params):
     fbshape = nf, fh, fw
     gsw = fw / 5.
     gsh = fw / 5.
-    xc = fw / 2
-    yc = fh / 2
+    xc = fw // 2   # important! otherwise won't give exactly the same result.
+    yc = fh // 2
     filt_l = []
     filt_l_raw = []
     fix_bug = params['fix_bug']
@@ -48,6 +48,7 @@ def _get_gabor_filters(params):
                     _S = S
                 S **= 2.
                 # idx is the next one to work on.
+
                 while tot <= params['sep_threshold'] and idx < min(params['max_component'], fh, fw):
                     row = (U[:, idx] * _S[idx])[:, newaxis]
                     col = (V[idx, :])[newaxis, :]
