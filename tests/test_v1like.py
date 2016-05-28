@@ -7,6 +7,7 @@ import numpy as np
 from scipy.io import loadmat
 from skimage.io import imread
 import time
+from sklearn.pipeline import FeatureUnion
 
 debug = True
 
@@ -33,56 +34,65 @@ tol = 1e-5
 
 
 class MyTestCase(unittest.TestCase):
-    # @unittest.skip('for now')
-    def test_reference_legacy(self):
+    def test_reference_plus_legacy(self):
         """compare with reference result of original implementation"""
         image_list = ['./v1like_ref/sample_{}.png'.format(i) for i in range(10)]
-        reference_result = loadmat('./v1like_ref/reference_v1like_result.mat')['feature_matrix']
-        #old_images = loadmat('./v1like_ref/reference_v1like_result.mat')['images_after_resize']
-        # now let's get them.
-        # use default parameters.
-        # get the fitlers.
-        pars = v1like.default_pars()
-        filt_l, filt_l_raw = v1s_misc._get_gabor_filters(pars['representation']['filter'])
-        result = []
-        with Timer('legacy version'):
-            for idx, imagename in enumerate(image_list):
-                im = imread(imagename)
-                result.append(v1like._part_generate_repr(im, pars['steps'],
-                                                         pars['representation'], pars['featsel'], filt_l, legacy=True,
-                                                         debug=True))
-                print("finish image {}".format(idx + 1))
-
-        result_legacy = np.array(result)
+        reference_result = loadmat('./v1like_ref/reference_v1like_result_plus.mat')['feature_matrix']
+        X = [imread(imagename) for imagename in image_list]
+        v1like_instance = v1like.V1Like(pars_baseline='simple_plus', legacy=True, debug=debug)
+        with Timer('simple_plus legacy version'):
+            result_legacy = v1like_instance.transform(X)
         self.assertEqual(reference_result.dtype, result_legacy.dtype)
         self.assertEqual(reference_result.shape, result_legacy.shape)
         if debug:
             print(abs(reference_result[:, :] - result_legacy[:, :]).max())
         self.assertTrue(np.allclose(reference_result, result_legacy, atol=tol))
 
-    def test_reference_legacy_faster(self):
+    def test_reference_plusplus_legacy(self):
+        """compare with reference result of original implementation"""
+        image_list = ['./v1like_ref/sample_{}.png'.format(i) for i in range(10)]
+        reference_result = loadmat('./v1like_ref/reference_v1like_result_plusplus.mat')['feature_matrix']
+        X = [imread(imagename) for imagename in image_list]
+        v1like_instance_1 = v1like.V1Like(pars_baseline='simple_plus', legacy=True, debug=debug)
+        v1like_instance_2 = v1like.V1Like(pars_baseline='simple_plusplus_2nd_scale', legacy=True, debug=debug)
+        v1like_instance = FeatureUnion([('scale_1', v1like_instance_1),
+                                        ('scale_2', v1like_instance_2)])
+        # seems that FeatureUnion's X can't be a iterator. must be a true array.
+        with Timer('simple_plus legacy version'):
+            result_legacy = v1like_instance.transform(X)
+        self.assertEqual(reference_result.dtype, result_legacy.dtype)
+        self.assertEqual(reference_result.shape, result_legacy.shape)
+        if debug:
+            print(abs(reference_result[:, :] - result_legacy[:, :]).max())
+        self.assertTrue(np.allclose(reference_result, result_legacy, atol=tol))
+
+    def test_reference_simple_legacy(self):
         """compare with reference result of original implementation"""
         image_list = ['./v1like_ref/sample_{}.png'.format(i) for i in range(10)]
         reference_result = loadmat('./v1like_ref/reference_v1like_result.mat')['feature_matrix']
-        old_images = loadmat('./v1like_ref/reference_v1like_result.mat')['images_after_resize']
-        # now let's get them.
-        # use default parameters.
-        # get the fitlers.
-        pars = v1like.default_pars()
-        filt_l, filt_l_raw = v1s_misc._get_gabor_filters(pars['representation']['filter'])
-        result = []
+        X = [imread(imagename) for imagename in image_list]
+        v1like_instance = v1like.V1Like(pars_baseline='simple', legacy=True, debug=debug)
+        with Timer('simple_plus legacy version'):
+            result_legacy = v1like_instance.transform(X)
+        self.assertEqual(reference_result.dtype, result_legacy.dtype)
+        self.assertEqual(reference_result.shape, result_legacy.shape)
+        if debug:
+            print(abs(reference_result[:, :] - result_legacy[:, :]).max())
+        self.assertTrue(np.allclose(reference_result, result_legacy, atol=tol))
+
+    def test_reference_plus_legacy_faster(self):
+        """compare with reference result of original implementation"""
+        reference_result = loadmat('./v1like_ref/reference_v1like_result_plus.mat')['feature_matrix']
+        old_images = loadmat('./v1like_ref/reference_v1like_result_plus.mat')['images_after_resize']
+        v1like_instance = v1like.V1Like(pars_baseline='simple_plus', legacy=False, debug=debug)
+        pars = v1like.default_pars(type='simple')
+        filt_l, _ = v1s_misc._get_gabor_filters(pars['representation']['filter'])
         filt_l_raw_reconstruct = [np.sum(np.array([row.dot(col) for row, col in filt_l[i]]), axis=0) for i in
                                   range(len(filt_l))]
-        with Timer('faster version'):
-            for idx, imagename in enumerate(image_list):
-                im_legacy = old_images[idx]
+        v1like_instance.reload_filters(filt_l_raw_reconstruct)
+        with Timer('simple_plus faster version'):
+            result_legacy = v1like_instance.transform(old_images)
 
-                result.append(v1like._part_generate_repr(im_legacy, pars['steps'] - {'preproc_resize'},
-                                                         pars['representation'], pars['featsel'], filt_l_raw_reconstruct,
-                                                         legacy=False, debug=True))
-                print("finish image {}".format(idx + 1))
-
-        result_legacy = np.array(result)
         self.assertEqual(reference_result.dtype, result_legacy.dtype)
         self.assertEqual(reference_result.shape, result_legacy.shape)
         # these two parts are pretty different.
@@ -90,6 +100,75 @@ class MyTestCase(unittest.TestCase):
                                       99) < 1e-3)
         self.assertTrue(np.percentile(abs(reference_result[:, 30 * 30 * 96:] - result_legacy[:, 30 * 30 * 96:]),
                                       99) <= 1)
+
+    def test_reference_simple_legacy_faster(self):
+        """compare with reference result of original implementation"""
+        """compare with reference result of original implementation"""
+        reference_result = loadmat('./v1like_ref/reference_v1like_result.mat')['feature_matrix']
+        old_images = loadmat('./v1like_ref/reference_v1like_result.mat')['images_after_resize']
+        v1like_instance = v1like.V1Like(pars_baseline='simple', legacy=False, debug=debug)
+        pars = v1like.default_pars(type='simple')
+        filt_l, _ = v1s_misc._get_gabor_filters(pars['representation']['filter'])
+        filt_l_raw_reconstruct = [np.sum(np.array([row.dot(col) for row, col in filt_l[i]]), axis=0) for i in
+                                  range(len(filt_l))]
+        v1like_instance.reload_filters(filt_l_raw_reconstruct)
+        with Timer('simple faster version'):
+            result_legacy = v1like_instance.transform(old_images)
+
+        self.assertEqual(reference_result.dtype, result_legacy.dtype)
+        self.assertEqual(reference_result.shape, result_legacy.shape)
+        # these two parts are pretty different.
+        self.assertTrue(np.percentile(abs(reference_result - result_legacy), 99) < 1e-3)
+
+    def test_reference_plusplus_legacy_faster(self):
+        """compare with reference result of original implementation"""
+        reference_result = loadmat('./v1like_ref/reference_v1like_result_plusplus.mat')['feature_matrix']
+        old_images = loadmat('./v1like_ref/reference_v1like_result_plusplus.mat')['images_after_resize']
+        old_images_2 = loadmat('./v1like_ref/reference_v1like_result_plusplus.mat')['images_after_resize_2']
+        v1like_instance_1 = v1like.V1Like(pars_baseline='simple_plus', legacy=False, debug=debug)
+        v1like_instance_2 = v1like.V1Like(pars_baseline='simple_plusplus_2nd_scale', legacy=False, debug=debug)
+        pars = v1like.default_pars(type='simple')
+        filt_l, _ = v1s_misc._get_gabor_filters(pars['representation']['filter'])
+        filt_l_raw_reconstruct = [np.sum(np.array([row.dot(col) for row, col in filt_l[i]]), axis=0) for i in
+                                  range(len(filt_l))]
+        v1like_instance_1.reload_filters(filt_l_raw_reconstruct)
+        v1like_instance_2.reload_filters(filt_l_raw_reconstruct)
+        with Timer('simple_plus faster version'):
+            result_legacy_1 = v1like_instance_1.transform(old_images)
+            result_legacy_2 = v1like_instance_2.transform(old_images_2)
+        result_legacy = np.concatenate((result_legacy_1, result_legacy_2), axis=1)
+
+        self.assertEqual(reference_result.dtype, result_legacy.dtype)
+        self.assertEqual(reference_result.shape, result_legacy.shape)
+        # these two parts are pretty different.
+        slice_scale_1_simple = slice(None, 30 * 30 * 96)
+        slice_scale_1_complex = slice(30 * 30 * 96, 126400)
+        slice_scale_2_simple = slice(126400, 126400 + 30 * 30 * 96)
+        slice_scale_2_complex = slice(126400 + 30 * 30 * 96, None)
+        if debug:
+            print(np.percentile(abs(reference_result[:, slice_scale_1_simple] - result_legacy[:, slice_scale_1_simple]),
+                                99))
+            print(np.percentile(abs(reference_result[:, slice_scale_2_simple] - result_legacy[:, slice_scale_2_simple]),
+                                99))
+            print(
+                np.percentile(abs(reference_result[:, slice_scale_1_complex] - result_legacy[:, slice_scale_1_complex]),
+                              99))
+            print(
+                np.percentile(abs(reference_result[:, slice_scale_2_complex] - result_legacy[:, slice_scale_2_complex]),
+                              99))
+        self.assertTrue(
+            np.percentile(abs(reference_result[:, slice_scale_1_simple] - result_legacy[:, slice_scale_1_simple]),
+                          99) < 1e-3)
+
+        self.assertTrue(
+            np.percentile(abs(reference_result[:, slice_scale_2_simple] - result_legacy[:, slice_scale_2_simple]),
+                          99) < 1e-3)
+        self.assertTrue(
+            np.percentile(abs(reference_result[:, slice_scale_1_complex] - result_legacy[:, slice_scale_1_complex]),
+                          99) <= 1)
+        self.assertTrue(
+            np.percentile(abs(reference_result[:, slice_scale_2_complex] - result_legacy[:, slice_scale_2_complex]),
+                          99) <= 1)
 
     def get_new_image(self, ndim=2):
         shape_this = np.random.randint(50, 200, (ndim,), dtype=np.uint16)

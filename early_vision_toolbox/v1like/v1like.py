@@ -18,19 +18,56 @@ from .legacy import v1s_misc, v1s_funcs
 import scipy.misc
 from scipy.misc import fromimage
 from itertools import product
+from functools import partial
 
 conv = sp.signal.fftconvolve
-#conv = sp.signal.convolve
-#conv_spatial = sp.signal.convolve
+
+
+# conv = sp.signal.convolve
+# conv_spatial = sp.signal.convolve
 
 class V1Like(object):
-    def __init__(self, pars_to_update=None, legacy=False):
+    def __init__(self, pars_baseline='simple', pars_to_update=None, n_jobs=4, legacy=False, debug=False):
         self._filt_l = None
-        self.pars = deepcopy(default_pars())
+        self.pars = default_pars(pars_baseline)
         # then update.
 
         # then get gabor.
-        self._filt_l = _get_gabor_filters(self.pars, legacy)
+        self._filt_l = _get_gabor_filters(self.pars['representation']['filter'], legacy)
+        self._n_jobs = n_jobs
+        self.legacy = legacy
+        self.debug = debug
+        self.func_to_apply = partial(_part_generate_repr, steps=self.pars['steps'],
+                                     params=self.pars['representation'],
+                                     featsel=self.pars['featsel'],
+                                     filt_l=self._filt_l, legacy=legacy, debug=debug)
+
+    def reload_filters(self, filt_l):
+        self._filt_l = filt_l
+        self.func_to_apply = partial(_part_generate_repr, steps=self.pars['steps'],
+                                     params=self.pars['representation'],
+                                     featsel=self.pars['featsel'],
+                                     filt_l=self._filt_l, legacy=self.legacy, debug=self.debug)
+
+    def transform(self, X, n_jobs=None):
+        """
+
+        Parameters
+        ----------
+        X : iterable of images.
+
+        Returns
+        -------
+
+        """
+        if n_jobs is None:
+            _n_jobs = self._n_jobs
+        else:
+            _n_jobs = n_jobs
+        result = Parallel(n_jobs=_n_jobs, verbose=5, max_nbytes=None)(delayed(self.func_to_apply)(x) for x in X)
+        result = np.array(result)
+        assert result.ndim == 2 and result.dtype == np.float32
+        return result
 
 
 def _get_gabor_filters(params, legacy=False):
@@ -85,7 +122,7 @@ def gabor2d(sigma, wfreq, worient, wphase, size, normalize=True):
     return gabor
 
 
-def default_pars():
+def default_pars(type='simple_plus'):
     """default parameter for v1like model. here I copied from simple_plus.
 
     Returns
@@ -171,25 +208,71 @@ def default_pars():
         },
     }
 
-    featsel = {
-        # Include representation output ? True or False
-        'output': True,
+    if type == 'simple_plusplus_2nd_scale':
+        representation['preproc']['max_edge'] = 75
 
-        # Include grayscale values ? None or (height, width)
-        'input_gray': (100, 100),
-        # Include color histograms ? None or nbins per color
-        'input_colorhists': None,
-        # Include input norm histograms ? None or (division, nfeatures)
-        'normin_hists': None,
-        # Include filter output histograms ? None or (division, nfeatures)
-        'filter_hists': None,
-        # Include activation output histograms ? None or (division, nfeatures)
-        'activ_hists': (2, 10000),
-        # Include output norm histograms ? None or (division, nfeatures)
-        'normout_hists': (1, 10000),
-        # Include representation output histograms ? None or (division, nfeatures)
-        'dimr_hists': (1, 10000),
-    }
+    if type == 'simple_plus':
+        featsel = {
+            # Include representation output ? True or False
+            'output': True,
+
+            # Include grayscale values ? None or (height, width)
+            'input_gray': (100, 100),
+            # Include color histograms ? None or nbins per color
+            'input_colorhists': None,
+            # Include input norm histograms ? None or (division, nfeatures)
+            'normin_hists': None,
+            # Include filter output histograms ? None or (division, nfeatures)
+            'filter_hists': None,
+            # Include activation output histograms ? None or (division, nfeatures)
+            'activ_hists': (2, 10000),
+            # Include output norm histograms ? None or (division, nfeatures)
+            'normout_hists': (1, 10000),
+            # Include representation output histograms ? None or (division, nfeatures)
+            'dimr_hists': (1, 10000),
+        }
+    elif type == 'simple':
+        featsel = {
+            # Include representation output ? True or False
+            'output': True,
+
+            # Include grayscale values ? None or (height, width)
+            'input_gray': None,
+            # Include color histograms ? None or nbins per color
+            'input_colorhists': None,
+            # Include input norm histograms ? None or (division, nfeatures)
+            'normin_hists': None,
+            # Include filter output histograms ? None or (division, nfeatures)
+            'filter_hists': None,
+            # Include activation output histograms ? None or (division, nfeatures)
+            'activ_hists': None,
+            # Include output norm histograms ? None or (division, nfeatures)
+            'normout_hists': None,
+            # Include representation output histograms ? None or (division, nfeatures)
+            'dimr_hists': None,
+        }
+    elif type == 'simple_plusplus_2nd_scale':
+        featsel = {
+            # Include representation output ? True or False
+            'output': True,
+
+            # Include grayscale values ? None or (height, width)
+            'input_gray': (37, 37),
+            # Include color histograms ? None or nbins per color
+            'input_colorhists': None,
+            # Include input norm histograms ? None or (division, nfeatures)
+            'normin_hists': None,
+            # Include filter output histograms ? None or (division, nfeatures)
+            'filter_hists': None,
+            # Include activation output histograms ? None or (division, nfeatures)
+            'activ_hists': (2, 10000),
+            # Include output norm histograms ? None or (division, nfeatures)
+            'normout_hists': (1, 10000),
+            # Include representation output histograms ? None or (division, nfeatures)
+            'dimr_hists': (1, 10000),
+        }
+    else:
+        raise NotImplementedError('not supported pars type!')
 
     return deepcopy({'steps': steps,
                      'representation': representation,
@@ -483,14 +566,14 @@ def local_normalization(im, kshape, threshold):
     ksize = kh * kw * depth
     h_slice = slice(kh // 2, -(kh // 2))
     w_slice = slice(kw // 2, -(kw // 2))
-    d_slice = slice(depth//2, depth//2+1)  # this always works, for both even and odd depth.
+    d_slice = slice(depth // 2, depth // 2 + 1)  # this always works, for both even and odd depth.
 
     # TODO: add an option to do per channel or across channel normalization.
     # first compute local mean (on 3d stuff).
 
     # local mean kernel
     local_mean_kernel = np.ones((kh, kw, depth), dtype=im.dtype) / ksize
-    #local_mean = conv(im, local_mean_kernel, mode='valid')  # it's 3D.
+    # local_mean = conv(im, local_mean_kernel, mode='valid')  # it's 3D.
 
     local_mean = uniform_filter(im, size=(kh, kw, depth), mode='constant')[h_slice, w_slice, d_slice]
 
@@ -509,9 +592,9 @@ def local_normalization(im, kshape, threshold):
 
     local_sum_kernel = np.ones((kh, kw, depth), dtype=im.dtype)
 
-    #hssq = conv(np.square(im), local_sum_kernel, mode='valid')
+    # hssq = conv(np.square(im), local_sum_kernel, mode='valid')
     # uniform filter is faster.
-    hssq = ksize*uniform_filter(np.square(im), size=(kh, kw, depth), mode='constant')[h_slice, w_slice, d_slice]
+    hssq = ksize * uniform_filter(np.square(im), size=(kh, kw, depth), mode='constant')[h_slice, w_slice, d_slice]
     hssq_normed = hssq - ksize * np.square(local_mean)
     np.putmask(hssq_normed, hssq_normed < 0, 0)
     h_div = np.sqrt(hssq_normed) + eps

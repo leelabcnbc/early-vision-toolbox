@@ -7,6 +7,7 @@
 # TODO: make a Docker environment for dicarlo_v1like
 
 . activate dicarlo_v1like_reference
-python v1s_run_debug.py params_simple_plus.py sample_dataset.txt reference_v1like_result.mat
-
+python v1s_run_debug.py params_simple.py sample_dataset.txt reference_v1like_result.mat
+python v1s_run_debug.py params_simple_plus.py sample_dataset.txt reference_v1like_result_plus.mat
+python v1s_run_debug.py params_simple_plusplus.py sample_dataset.txt reference_v1like_result_plusplus.mat
 # then copy back reference_v1like_result.mat into v1like_ref in early vision toolbox.
