@@ -49,6 +49,19 @@ class V1Like(object):
                                      featsel=self.pars['featsel'],
                                      filt_l=self._filt_l, legacy=self.legacy, debug=self.debug)
 
+    def fit(self, X, y):
+        """defined to match sklearn Pipeline protocol.
+
+        Parameters
+        ----------
+        X
+
+        Returns
+        -------
+
+        """
+        return self   # as required by sklearn.
+
     def transform(self, X, n_jobs=None):
         """
 
@@ -60,6 +73,7 @@ class V1Like(object):
         -------
 
         """
+        print("\nworking on problem of size {}".format(len(X)))
         if n_jobs is None:
             _n_jobs = self._n_jobs
         else:
