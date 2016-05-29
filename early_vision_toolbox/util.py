@@ -59,7 +59,15 @@ def make_hdf5_iter_class(filename, datasetlist):
 
 
 def normalize_vector_inplace(x):
+    """
+    this inplace should be understood as best effort, not guaranteed.
+    :param x:
+    :return:
+    """
+    # be a little careful. actually I'm not sure if this will make sure it's really inplace.
+    assert type(x) == np.ndarray, "must use vanilla np.ndarray to support inplace operation!"
     x -= x.mean()
     a = x.std()
     if a != 0:
         x /= a
+    return x

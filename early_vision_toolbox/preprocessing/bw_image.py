@@ -7,7 +7,7 @@ from sklearn.preprocessing import FunctionTransformer
 from sklearn.pipeline import Pipeline
 from functools import partial
 from copy import deepcopy
-from .util import make_2d_input_matrix
+from ..util import make_2d_input_matrix
 from numpy.fft import fft2, ifft2, fftshift, ifftshift
 
 FunctionTransformer = partial(FunctionTransformer, validate=False)  # turn off all validation.
@@ -280,7 +280,8 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
                                           # clip the central central_clip[0] x central_clip[1] part in the frequency
                                           # domain. by default, don't do anything.
                                           'normalize_pre': True,  # do DC removing + unit var before whitening
-                                          'normalize_post': True, # unit var after whitening, in H Lee's implementation.
+                                          'normalize_post': True,
+                                          # unit var after whitening, in H Lee's implementation.
                                           'no_filter': False  # useful when only want to do central_clip.
                                           },
                     'removeDC': {},

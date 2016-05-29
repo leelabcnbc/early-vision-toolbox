@@ -540,7 +540,7 @@ def _preproc_lowpass(im, lsum_ksize, legacy=False):
         else:
             im = uniform_filter(im, size=lsum_ksize, mode='constant')
 
-    normalize_vector_inplace(im)
+    im = normalize_vector_inplace(im)
     if not legacy:
         assert im.dtype == np.float32
     return im
