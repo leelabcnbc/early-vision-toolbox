@@ -7,6 +7,7 @@ from copy import deepcopy
 from skimage.transform import resize, rescale
 from skimage.color import gray2rgb
 from skimage import img_as_float
+from numbers import Integral
 
 FunctionTransformer = partial(FunctionTransformer, validate=False)  # turn off all validation.
 
@@ -48,7 +49,7 @@ def whole_image_step_transformer_dispatch(step, step_pars):
     elif step == 'putInCanvas':
         return FunctionTransformer(partial(enlarge_canvas_dataset, canvascolor=step_pars['canvascolor'],
                                            rows=step_pars['canvassize'][0], cols=step_pars['canvassize'][1],
-                                           jitter=step_pars['jitter'], jittermaxpixel=step_pars['jitermaxpixel'],
+                                           jitter=step_pars['jitter'], jittermaxpixel=step_pars['jittermaxpixel'],
                                            jitterrandstate=step_pars['jitterrandseed'],
                                            external_jitter_list=step_pars['external_jitter_list'],
                                            strict=step_pars['strict'],
@@ -82,7 +83,7 @@ def whole_image_preprocessing_pipeline(steps=None, pars=None):
                                     'jitterrandseed': None,
                                     'canvassize': (227, 227),  # default size for AlexNet.
                                     'external_jitter_list': None,  # explicitly provide jitter parameters.
-                                    'strict': True,  # check top left corner of image match canvas color.
+                                    'strict': False,  # check top left corner of image match canvas color.
                                     'crows': None,
                                     'ccols': None,  # center of the patch. better not change it. you need to check the
                                     # actual code to understand their behaviour completely.
@@ -169,7 +170,7 @@ def enlarge_canvas_dataset(imagelist, canvascolor, rows, cols=None, crows=None, 
         else:  # generate a jitter list.
             if jitterrandstate is None:
                 jitterrandstate = np.random.RandomState(None)  # initialize a random state.
-            elif isinstance(jitterrandstate, int):
+            elif isinstance(jitterrandstate, Integral):  # use abstract base class to check integer.
                 jitterrandstate = np.random.RandomState(jitterrandstate)  # initialize a random state.
             else:
                 assert isinstance(jitterrandstate, np.random.RandomState), "you must give me int, None, or RandomState"
@@ -178,10 +179,10 @@ def enlarge_canvas_dataset(imagelist, canvascolor, rows, cols=None, crows=None, 
 
             # let's generate a random set of -1 and +1 to flip jitter's sign.
             # jitterlist = jitterlist*jitterrandstate.choice([-1,1],jitterlist.shape)
-            print("max r jitter:", jitterlist[:, 0].max(), "min r jitter: ", jitterlist[:, 0].min(),
-                  "mean r jitter:", jitterlist[:, 0].mean(),
-                  "max c jitter:", jitterlist[:, 1].max(), "min c jitter: ", jitterlist[:, 1].min(),
-                  "mean c jitter:", jitterlist[:, 1].mean())  # give people some statistics on jitters.
+            # print("max r jitter:", jitterlist[:, 0].max(), "min r jitter: ", jitterlist[:, 0].min(),
+            #       "mean r jitter:", jitterlist[:, 0].mean(),
+            #       "max c jitter:", jitterlist[:, 1].max(), "min c jitter: ", jitterlist[:, 1].min(),
+            #       "mean c jitter:", jitterlist[:, 1].mean())  # give people some statistics on jitters.
 
     imagelistnew = [None] * len(imagelist)
     for idx, image in enumerate(imagelist):
