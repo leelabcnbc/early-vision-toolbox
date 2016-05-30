@@ -31,7 +31,12 @@ class V1Like(object):
         self._filt_l = None
         self.pars = default_pars(pars_baseline)
         # then update.
-
+        if pars_to_update is not None:
+            for key in pars_to_update:
+                #print('update key {}'.format(key))
+                # should not use update, since here it's actually override. You must provide a full pars to overwrite.
+                # otherwise, the steps can't be reduced.
+                self.pars[key] = pars_to_update[key]
         # then get gabor.
         self._filt_l = _get_gabor_filters(self.pars['representation']['filter'], legacy)
         self._n_jobs = n_jobs
@@ -60,7 +65,7 @@ class V1Like(object):
         -------
 
         """
-        return self   # as required by sklearn.
+        return self  # as required by sklearn.
 
     def transform(self, X, n_jobs=None):
         """
@@ -193,6 +198,7 @@ def default_pars(type='simple_plus'):
             # should be set to 1 or bigger when debugging.
             'sep_threshold': .9,
             'max_component': 100000,
+            # just big enough (using inf would be more correct technically, though that will be a problem for JSON)
             'fix_bug': False,  # whether fixing separated convolution bug.
         },
 
@@ -340,12 +346,13 @@ def _part_generate_repr(img, steps, params, featsel, filt_l, legacy=True, debug=
 
     if 'filter' in steps:
         response = _filter(response, filt_l, legacy)
+    else:
+        response = response[:, :, np.newaxis]
+    # make sure it's 3d.
+    assert response.ndim == 3, "must have a 3d response array"
     imga2 = response.copy()
     if debug:
         print("imga2, shape {}, mean {}, std {}".format(imga2.shape, imga2.mean(), imga2.std()))
-
-    # make sure it's 3d.
-    assert response.ndim == 3, "must have a 3d response array"
 
     if 'activ' in steps:
         response = response.clip(params['activ']['minout'], params['activ']['maxout'])
