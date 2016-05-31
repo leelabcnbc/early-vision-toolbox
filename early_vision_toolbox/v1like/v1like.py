@@ -48,7 +48,7 @@ class V1Like(object):
                                      filt_l=self._filt_l, legacy=legacy, debug=debug)
 
     def reload_filters(self, filt_l):
-        self._filt_l = filt_l
+        self._filt_l = np.asarray(filt_l)
         self.func_to_apply = partial(_part_generate_repr, steps=self.pars['steps'],
                                      params=self.pars['representation'],
                                      featsel=self.pars['featsel'],
@@ -200,6 +200,7 @@ def default_pars(type='simple_plus'):
             'max_component': 100000,
             # just big enough (using inf would be more correct technically, though that will be a problem for JSON)
             'fix_bug': False,  # whether fixing separated convolution bug.
+            'mode': 'same',  # this is only available for non legacy. can be also ``'valid'``.
         },
 
         # - simple non-linear activation
@@ -350,7 +351,7 @@ def _part_generate_repr(img, steps, params, featsel, filt_l, legacy=True, debug=
         print("imga1, shape{}, mean {}, std {}".format(imga1.shape, imga1.mean(), imga1.std()))
 
     if 'filter' in steps:
-        response = _filter(response, filt_l, legacy)
+        response = _filter(response, filt_l, legacy, mode=params['filter']['mode'])
     else:
         response = response[:, :, np.newaxis]
     # make sure it's 3d.
@@ -459,7 +460,7 @@ def handle_feature_selection(output, images, featsel):
     return fvector
 
 
-def _filter(im, filt_l, legacy=False):
+def _filter(im, filt_l, legacy=False, mode='same'):
     if not legacy:
         assert im.dtype == np.float32
     assert im.ndim == 2
@@ -472,9 +473,19 @@ def _filter(im, filt_l, legacy=False):
         result_padded = conv(im[np.newaxis, :, :], filt_l, mode='full')
         _, current_h, current_w = result_padded.shape
         new_h, new_w = im.shape
+        _, filter_h, filter_w = filt_l.shape
+        if mode == 'same':
+            new_h_, new_w_ = new_h, new_w
+        elif mode == 'valid':
+            new_h_, new_w_ = new_h-filter_h+1, new_w-filter_w+1
+        else:
+            raise ValueError('not supported type!')
 
-        h_slice = slice((current_h - new_h) // 2, (current_h - new_h) // 2 + new_h)
-        w_slice = slice((current_w - new_w) // 2, (current_w - new_w) // 2 + new_w)
+        assert new_h_ > 0 and new_w_ > 0
+
+        h_slice = slice((current_h - new_h_) // 2, (current_h - new_h_) // 2 + new_h_)
+        w_slice = slice((current_w - new_w_) // 2, (current_w - new_w_) // 2 + new_w_)
+
         result = result_padded.transpose((1, 2, 0))[h_slice, w_slice].astype(np.float32)
 
         # this is the one used to select the shape in scipy.signal.fftconvolve
@@ -550,6 +561,7 @@ def _preproc_lowpass(im, lsum_ksize, legacy=False):
             k = np.ones(lsum_ksize, 'f') / lsum_ksize
             im = conv(conv(im, k[np.newaxis, :], mode), k[:, np.newaxis], mode)
         else:
+            assert lsum_ksize % 2 == 1, "must have odd size low pass filter!"
             im = uniform_filter(im, size=lsum_ksize, mode='constant')
 
     im = normalize_vector_inplace(im)
