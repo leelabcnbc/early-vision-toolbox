@@ -34,6 +34,36 @@ tol = 1e-5
 
 
 class MyTestCase(unittest.TestCase):
+    def test_reference_2_legacy(self):
+        """compare with reference result of original implementation"""
+        image_list = ['./v1like_ref/ec_001_s0.png', './v1like_ref/ec_002_s0.png']
+        reference_result = loadmat('./v1like_ref/reference_2_v1like_result.mat')['feature_matrix']
+        X = [imread(imagename) for imagename in image_list]
+        #X = loadmat('./v1like_ref/reference_2_v1like_result.mat')['images_after_resize']
+        #print('use old images')
+        v1like_instance = v1like.V1Like(pars_baseline='simple', legacy=True, debug=debug)
+        with Timer('simple (bw) legacy version'):
+            result_legacy = v1like_instance.transform(X)
+        self.assertEqual(reference_result.dtype, result_legacy.dtype)
+        self.assertEqual(reference_result.shape, result_legacy.shape)
+        if debug:
+            print(abs(reference_result[:, :] - result_legacy[:, :]).max())
+        self.assertTrue(np.allclose(reference_result, result_legacy, atol=tol))
+
+    def test_reference_2_plus_legacy(self):
+        """compare with reference result of original implementation"""
+        image_list = ['./v1like_ref/ec_001_s0.png', './v1like_ref/ec_002_s0.png']
+        reference_result = loadmat('./v1like_ref/reference_2_v1like_result_plus.mat')['feature_matrix']
+        X = [imread(imagename) for imagename in image_list]
+        v1like_instance = v1like.V1Like(pars_baseline='simple_plus', legacy=True, debug=debug)
+        with Timer('simple_plus (bw) legacy version'):
+            result_legacy = v1like_instance.transform(X)
+        self.assertEqual(reference_result.dtype, result_legacy.dtype)
+        self.assertEqual(reference_result.shape, result_legacy.shape)
+        if debug:
+            print(abs(reference_result[:, :] - result_legacy[:, :]).max())
+        self.assertTrue(np.allclose(reference_result, result_legacy, atol=tol))
+
     def test_reference_plus_legacy(self):
         """compare with reference result of original implementation"""
         image_list = ['./v1like_ref/sample_{}.png'.format(i) for i in range(10)]
@@ -58,7 +88,7 @@ class MyTestCase(unittest.TestCase):
         v1like_instance = FeatureUnion([('scale_1', v1like_instance_1),
                                         ('scale_2', v1like_instance_2)])
         # seems that FeatureUnion's X can't be a iterator. must be a true array.
-        with Timer('simple_plus legacy version'):
+        with Timer('simple_plusplus legacy version'):
             result_legacy = v1like_instance.transform(X)
         self.assertEqual(reference_result.dtype, result_legacy.dtype)
         self.assertEqual(reference_result.shape, result_legacy.shape)
@@ -72,7 +102,7 @@ class MyTestCase(unittest.TestCase):
         reference_result = loadmat('./v1like_ref/reference_v1like_result.mat')['feature_matrix']
         X = [imread(imagename) for imagename in image_list]
         v1like_instance = v1like.V1Like(pars_baseline='simple', legacy=True, debug=debug)
-        with Timer('simple_plus legacy version'):
+        with Timer('simple legacy version'):
             result_legacy = v1like_instance.transform(X)
         self.assertEqual(reference_result.dtype, result_legacy.dtype)
         self.assertEqual(reference_result.shape, result_legacy.shape)

@@ -323,12 +323,17 @@ def _part_generate_repr(img, steps, params, featsel, filt_l, legacy=True, debug=
         print("orig_imga, mean {}, std {}".format(orig_imga.mean(), orig_imga.std()))
     # convert image into gray scale, 2 dim array.
     response = img
-    if response.ndim == 3:
+    # this is the established way to deal with images for legacy behavior.
+    if legacy:
         response = img.astype(np.float32) / 255.0
+
+    if response.ndim == 3:
         response = 0.2989 * response[:, :, 0] + 0.5870 * response[:, :, 1] + 0.1140 * response[:, :, 2]
 
     assert response.ndim == 2, "must be two channels!"
+    # in case we still have float64 dtype, in the case of non legacy
     response = response.astype(np.float32, copy=True)
+    assert response.dtype == np.float32
     if debug:
         print("imga0, mean {}, std {}".format(response.mean(), response.std()))
 

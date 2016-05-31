@@ -8,6 +8,29 @@ from joblib import Parallel, delayed
 import time
 
 
+def compute_rdm_list(X, split_k=2, split_rng_state=None, noise_level=None, noise_rng_state=None, debug=False):
+    """
+
+    :param X:
+    :param split_k:
+    :param rng_state:
+    :return:
+    """
+    assert X.ndim == 2, "you must give a image x neuron X array"
+    if split_rng_state is None:
+        split_rng_state = np.random
+    rng_split_sets = np.array_split(split_rng_state.permutation(X.shape[1]), split_k)
+    rdm_list = []
+    for split_set in rng_split_sets:
+        response_mean_this = X[:, split_set]
+        if debug:
+            print(response_mean_this.shape)
+        rdm_list.append(compute_rdm(response_mean_this, noise_level, rng_state=noise_rng_state))
+    final_result = np.array(rdm_list)
+    assert final_result.ndim == 2 and final_result.shape[0] == split_k
+    return final_result
+
+
 def compute_rdm(X, noise_level=None, rng_state=None):
     if noise_level is None:
         noise_level = 0.0
