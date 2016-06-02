@@ -33,7 +33,7 @@ class V1Like(object):
         # then update.
         if pars_to_update is not None:
             for key in pars_to_update:
-                #print('update key {}'.format(key))
+                # print('update key {}'.format(key))
                 # should not use update, since here it's actually override. You must provide a full pars to overwrite.
                 # otherwise, the steps can't be reduced.
                 self.pars[key] = pars_to_update[key]
@@ -134,8 +134,10 @@ def gabor2d(sigma, wfreq, worient, wphase, size, normalize=True):
     """
     gabor = ig.Gabor(frequency=wfreq * size, xdensity=size, ydensity=size, size=2 * sigma / size,
                      orientation=worient, phase=wphase)()
+    assert gabor.ndim == 2
     if normalize:
         gabor -= gabor.mean()
+        # norm(x) when x is 1d or 2d are the same.
         gabor /= norm(gabor)
 
     return gabor
@@ -477,7 +479,7 @@ def _filter(im, filt_l, legacy=False, mode='same'):
         if mode == 'same':
             new_h_, new_w_ = new_h, new_w
         elif mode == 'valid':
-            new_h_, new_w_ = new_h-filter_h+1, new_w-filter_w+1
+            new_h_, new_w_ = new_h - filter_h + 1, new_w - filter_w + 1
         else:
             raise ValueError('not supported type!')
 
@@ -654,8 +656,12 @@ def _dimr(im, lsum_ksize, outshape, legacy=False):
                                                                mode='constant')
         inh, inw = filtered_im.shape[:2]
         outh, outw = outshape
-        hslice = np.round(np.linspace(0, inh - 1, outh)).astype(np.int16)
-        wslice = np.round(np.linspace(0, inw - 1, outw)).astype(np.int16)
-        result = filtered_im[np.ix_(hslice, wslice)]
+        assert (outh is None and outw is None) or (outh is not None and outw is not None)
+        if outh is not None and outw is not None:
+            hslice = np.round(np.linspace(0, inh - 1, outh)).astype(np.int16)
+            wslice = np.round(np.linspace(0, inw - 1, outw)).astype(np.int16)
+            result = filtered_im[np.ix_(hslice, wslice)]
+        else:
+            result = filtered_im  # only do mean (sum, actually) pooling.
     assert result.dtype == np.float32 and result.ndim == 3
     return result
