@@ -4,6 +4,7 @@ from tempfile import NamedTemporaryFile
 from os import remove
 from .network_definitions import caffe_deploy_proto_predefined, net_info_dict, get_prototxt
 
+
 def create_empty_net(name_or_proto, last_layer=None):
     """ create an uninitialized caffe model.
 
@@ -42,6 +43,7 @@ def create_empty_net(name_or_proto, last_layer=None):
     remove(f_temp_file.name)
     return created_net
 
+
 def create_predefined_net(name):
     """ create one example CNN in caffe examples.
 
@@ -49,7 +51,8 @@ def create_predefined_net(name):
     :return:
     """
     assert name in net_info_dict, "model {} is not defined!".format(name)
-    model_file_name, _1, _2, model_weight_name = net_info_dict[name]
+    model_weight_name = net_info_dict[name]['caffemodel_path']
+    model_file_name = net_info_dict[name]['prototxt_path']
     f_temp_file = NamedTemporaryFile(delete=False)
     f_temp_file.write(get_prototxt(model_file_name))
     f_temp_file.close()

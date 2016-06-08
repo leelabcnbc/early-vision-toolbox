@@ -24,7 +24,7 @@ class MyTestCase(unittest.TestCase):
         for key, value in caffe_deploy_proto_predefined.items():
             result, net_base = value
             prototxt_reconstruct = ''.join([net_base] + result.values())
-            prototxt_original = get_prototxt(net_info_dict[key][0])
+            prototxt_original = get_prototxt(net_info_dict[key]['prototxt_path'])
             self.assertEqual(prototxt_reconstruct, prototxt_original)
 
     def test_caffe_fill(self):
@@ -47,29 +47,16 @@ class MyTestCase(unittest.TestCase):
         """
         # first, a legacy alexnet test
         test_alexnet_projection()
-
-        # then, test the valid neuron stuff.
-        input_size_dict = {'alexnet': (227, 227),
-                           'vgg16': (224, 224),
-                           'vgg19': (224, 224),
-                           'caffenet': (227, 227)}
-
-        for model in input_size_dict:
+        for model in net_info_dict:
             print('test legacy model {}'.format(model))
             # raw_input('wait to continue')
-            input_size = input_size_dict[model]
+            input_size = net_info_dict[model]['input_size']
             projection_this = create_size_helper(model, input_size=input_size)
             test_valid_neurons(projection_this, list(projection_this.layer_info_dict.keys()))
 
     def test_size_util_minimum_coverage(self):
-
-        input_size_dict = {'alexnet': (227, 227),
-                           'vgg16': (224, 224),
-                           'vgg19': (224, 224),
-                           'caffenet': (227, 227)}
-
-        for model in input_size_dict:
-            input_size = input_size_dict[model]
+        for model in net_info_dict:
+            input_size = net_info_dict[model]['input_size']
             projection_this = create_size_helper(model, input_size=input_size)
             print('testing model {}'.format(model))
             for layer in projection_this.layer_info_dict:

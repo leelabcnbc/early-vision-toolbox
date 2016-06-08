@@ -273,9 +273,12 @@ class CNNSizeHelper(object):
         # it's not the case that it's either ordinary or too big.
         # first, check top_left_loc[0] and bottom_right_loc[0]
         if top_left_loc[0] <= bottom_right_loc[0]:
+            # ordinary case
             tl_loc_0 = top_left_loc[0]
             br_loc_0 = bottom_right_loc[0] + (1 if one_over_out else 0)
         else:
+            # the choice of neuron is ambiguous. simply pick the central one (well this central one is floored if
+            # there's no exact central to be chosen).
             tl_loc_0 = (top_left_loc[0] + bottom_right_loc[0])//2
             br_loc_0 = tl_loc_0 + (1 if one_over_out else 0)
 
