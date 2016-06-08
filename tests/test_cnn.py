@@ -51,15 +51,89 @@ class MyTestCase(unittest.TestCase):
         # then, test the valid neuron stuff.
         input_size_dict = {'alexnet': (227, 227),
                            'vgg16': (224, 224),
-                           'vgg19': (224, 224)}
+                           'vgg19': (224, 224),
+                           'caffenet': (227, 227)}
 
         for model in input_size_dict:
             print('test legacy model {}'.format(model))
-            #raw_input('wait to continue')
+            # raw_input('wait to continue')
             input_size = input_size_dict[model]
             projection_this = create_size_helper(model, input_size=input_size)
             test_valid_neurons(projection_this, list(projection_this.layer_info_dict.keys()))
 
+    def test_size_util_minimum_coverage(self):
+
+        input_size_dict = {'alexnet': (227, 227),
+                           'vgg16': (224, 224),
+                           'vgg19': (224, 224),
+                           'caffenet': (227, 227)}
+
+        for model in input_size_dict:
+            input_size = input_size_dict[model]
+            projection_this = create_size_helper(model, input_size=input_size)
+            print('testing model {}'.format(model))
+            for layer in projection_this.layer_info_dict:
+                print('testing model {}, layer {}'.format(model, layer))
+                for idx in range(10):
+                    print('iter {}'.format(idx + 1))
+                    center = np.random.randint(100, input_size[0] - 100, size=(2,))
+                    image_size = np.random.randint(50, 100)
+                    # only square stuff tested yet.
+                    top_left = center - image_size / 2
+                    bottom_right = center + image_size / 2
+
+                    tl_loc, br_loc = projection_this.compute_minimum_coverage(layer, top_left, bottom_right)
+
+                    tl_loc = np.asarray(tl_loc, dtype=int)
+                    br_loc = np.asarray(br_loc, dtype=int)
+
+                    self.assertTrue(
+                        test_size_util_minimum_coverage_helper(projection_this, layer, top_left, bottom_right,
+                                                               tl_loc, br_loc))
+                    # try removing one row
+                    if br_loc[0] - tl_loc[0] > 1:
+                        self.assertFalse(
+                            test_size_util_minimum_coverage_helper(projection_this, layer, top_left, bottom_right,
+                                                                   tl_loc + np.array([1, 0]), br_loc))
+                        self.assertFalse(
+                            test_size_util_minimum_coverage_helper(projection_this, layer, top_left, bottom_right,
+                                                                   tl_loc, br_loc - np.array([1, 0])))
+                    if br_loc[1] - tl_loc[1] > 1:
+                        self.assertFalse(
+                            test_size_util_minimum_coverage_helper(projection_this, layer, top_left, bottom_right,
+                                                                   tl_loc + np.array([0, 1]), br_loc))
+                        self.assertFalse(
+                            test_size_util_minimum_coverage_helper(projection_this, layer, top_left, bottom_right,
+                                                                   tl_loc, br_loc - np.array([0, 1])))
+
+
+def test_size_util_minimum_coverage_helper(projection_this, layer, top_left, bottom_right, tl_loc, br_loc):
+    # I have to verify that this is correct.
+    # first, check that the region covered from top_left_loc to bottom_right_loc contains my ROI.
+    range_original_tl, range_original_br = projection_this.compute_range(layer, tl_loc, br_loc)
+    # print('area1: {}, {}; area 2: {}, {}'.format(top_left, bottom_right, range_original_tl, range_original_br))
+    result = check_one_area_inside_another(top_left, bottom_right, range_original_tl, range_original_br)
+    return result
+
+
+def check_one_area_inside_another(top_left1, bottom_right1, top_left2, bottom_right2):
+    """ check area 1 inside area 2. everything exclusive.
+
+    Parameters
+    ----------
+    top_left1
+    bottom_right1
+    top_left2
+    bottom_right2
+
+    Returns
+    -------
+
+    """
+    tb_flag = top_left2[0] <= top_left1[0] < bottom_right1[0] <= bottom_right2[0]
+    lr_flag = top_left2[1] <= top_left1[1] < bottom_right1[1] <= bottom_right2[1]
+
+    return tb_flag and lr_flag
 
 
 def test_valid_neurons(helper, layer_names_alex):
@@ -69,7 +143,7 @@ def test_valid_neurons(helper, layer_names_alex):
         except ValueError as e:
             if e.args[0] == 'No inside neuron!':
                 print('this layer {} has no inside neuron'.format(layername))
-                #raw_input('wait to continue')
+                # raw_input('wait to continue')
                 continue
             else:
                 raise e
