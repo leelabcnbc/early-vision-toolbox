@@ -56,6 +56,7 @@ net_info_dict = {
                                         'bvlc_reference_caffenet.caffemodel'),
         'input_size': (227, 227),
         'last_non_fc_layer': 'pool5',
+        'input_blob': 'data',
     },
     'alexnet': {
         'prototxt_path': 'alexnet_deploy.prototxt',
@@ -77,6 +78,7 @@ net_info_dict = {
         'caffemodel_path': os.path.join(dir_dict['caffe_models'], 'bvlc_alexnet', 'bvlc_alexnet.caffemodel'),
         'input_size': (227, 227),
         'last_non_fc_layer': 'pool5',
+        'input_blob': 'data',
     },
     'vgg16': {
         'prototxt_path': 'VGG_ILSVRC_16_layers_deploy.prototxt',
@@ -107,6 +109,7 @@ net_info_dict = {
                                         'VGG_ILSVRC_16_layers.caffemodel'),
         'input_size': (224, 224),
         'last_non_fc_layer': 'pool5',
+        'input_blob': 'data',
     },
     'vgg19': {
         'prototxt_path': 'VGG_ILSVRC_19_layers_deploy.prototxt',
@@ -140,6 +143,7 @@ net_info_dict = {
                                         'VGG_ILSVRC_19_layers.caffemodel'),
         'input_size': (224, 224),
         'last_non_fc_layer': 'pool5',
+        'input_blob': 'data',
     }
 }
 
