@@ -77,6 +77,9 @@ net_info_dict = {
         'sep': None,
         'caffemodel_path': os.path.join(dir_dict['caffe_models'], 'bvlc_alexnet', 'bvlc_alexnet.caffemodel'),
         'input_size': (227, 227),
+        # well, this is also the name of the blob for the output of the last non full connect layer.
+        # basically people make no distinction between layer and its output blob.
+        # TODO generalize this to make a distinction between blob and layer if really needed.
         'last_non_fc_layer': 'pool5',
         'input_blob': 'data',
     },
