@@ -58,8 +58,10 @@ def rdm_similarity(ref_rdms, rdm):
 
     """
     ref_rdms = np.atleast_2d(np.array(ref_rdms, copy=False))
-    assert len(ref_rdms.shape) == 2
-    rdm = np.atleast_2d(rdm.ravel())
+    assert len(ref_rdms.shape) == 2  # this is K x N
+    # if not, actually spearmanr will return a scalar instead.
+    assert ref_rdms.shape[0] >= 2, 'at least two ref rdms or more'
+    rdm = np.atleast_2d(rdm.ravel())  # this is 1 x N
     rdm_similarities = spearmanr(ref_rdms, rdm, axis=1).correlation[-1, :-1]
     return rdm_similarities
 
