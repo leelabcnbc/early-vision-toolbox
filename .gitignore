@@ -75,3 +75,4 @@ target/
 
 /tests/preprocessing_ref/rsa_research_data/**/*.mat
 !/tests/preprocessing_ref/rsa_research_data/**/*meta.mat
+/tests/rsa_ref/rsatoolbox/

@@ -73,12 +73,16 @@ def compute_rdm_list_batch(ref_feature_matrix_list,
     return np.asarray(rdm_list_list)  # for compact.
 
 
-def compute_rdm_bounds(rdm_list, similarity_type='spearman'):
+def compute_rdm_bounds(rdm_list, similarity_type='spearman', legacy=True):
     """computes the estimated lower and upper bounds of the similarity between the ideal model and the given data..
     this is a remake of ``ceilingAvgRDMcorr`` in rsatoolbox in MATLAB.
 
     Parameters
     ----------
+    legacy : bool
+        whether behave exactly the same as in rsatoolbox. maybe this is the correct behavior.
+        so basically, in lower bound computation, at each time, we compute the best rdm for all but one RDMs,
+        and we hope this RDM to under fit. (I don't know whether one rdm's difference will turn overfit to underfit).
     rdm_list
     similarity_type : str
         type of similarity. only spearman is supported currently.
@@ -96,6 +100,8 @@ def compute_rdm_bounds(rdm_list, similarity_type='spearman'):
         rdm_list_rank = np.empty_like(rdm_list)
         for idx, rdm in enumerate(rdm_list):
             rdm_list_rank[idx] = rankdata(rdm)
+        if legacy:  # use rank transformed data, even for lower bound.
+            rdm_list = rdm_list_rank
         best_rdm = rdm_list_rank.mean(axis=0)
         upper_bound = rdm_similarity(rdm_list, best_rdm).mean()
     else:
