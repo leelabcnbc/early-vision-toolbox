@@ -5,8 +5,7 @@ from __future__ import division, print_function, absolute_import
 import numpy as np
 import h5py
 from sklearn.preprocessing import maxabs_scale
-from itertools import product
-
+from itertools import product, izip_longest, islice
 
 def make_2d_input_matrix(imgs):
     # make flat, if not ndarray or at least 3d.
@@ -58,6 +57,17 @@ class HDF5Iter(object):
 
 def make_hdf5_iter_class(filename, datasetlist):
     return HDF5Iter(filename, datasetlist)
+
+
+# from http://stackoverflow.com/questions/3992735/python-generator-that-groups-another-iterable-into-groups-of-n
+def grouper(iterable, n):
+    """
+    >>> list(grouper(3, 'ABCDEFG'))
+    [['A', 'B', 'C'], ['D', 'E', 'F'], ['G']]
+    """
+    iterable = iter(iterable)
+    return iter(lambda: list(islice(iterable, n)), [])
+
 
 
 def normalize_vector_inplace(x):

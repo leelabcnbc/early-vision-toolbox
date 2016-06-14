@@ -1,12 +1,12 @@
 """functions related to representational similarity analysis"""
 from __future__ import division, print_function, absolute_import
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import pdist, cdist
 from scipy.spatial.distance import squareform
 import numpy as np
 from scipy.stats import spearmanr
 from joblib import Parallel, delayed
-import time
 from scipy.stats import rankdata
+from functools import partial
 
 def compute_rdm_list(X, split_k=2, split_rng_state=None, noise_level=None, noise_rng_state=None, debug=False):
     """
@@ -83,6 +83,8 @@ def compute_rdm_bounds(rdm_list, similarity_type='spearman', legacy=True):
         whether behave exactly the same as in rsatoolbox. maybe this is the correct behavior.
         so basically, in lower bound computation, at each time, we compute the best rdm for all but one RDMs,
         and we hope this RDM to under fit. (I don't know whether one rdm's difference will turn overfit to underfit).
+
+        In practice, this seems to make little difference.
     rdm_list
     similarity_type : str
         type of similarity. only spearman is supported currently.
@@ -155,6 +157,19 @@ def compute_rdm_bounds_batch(ref_rdms_list, similarity_type='spearman'):
 
 
 def compute_rdm(X, noise_level=None, rng_state=None):
+    """
+
+    Parameters
+    ----------
+    X: ndarray
+    noise_level
+    rng_state
+
+    Returns
+    -------
+
+    """
+    assert X.ndim == 2
     if noise_level is None:
         noise_level = 0.0
     if rng_state is None:
@@ -165,11 +180,18 @@ def compute_rdm(X, noise_level=None, rng_state=None):
     return result
 
 
-def rdm_similarity(ref_rdms, rdm):
+def rdm_similarity(ref_rdms, rdm, similarity_type='spearman', computation_method=None,
+                   rdm_as_list=False):
     """
 
     Parameters
     ----------
+    computation_method : str or None
+        can be 'spearmanr' or 'rankdata+cdist'
+        # these two now only apply to spearman.
+        if you specify this, then you must have matching `similarity_type`.
+    similarity_type : str
+        can only be 'spearman' now.
     ref_rdms: ndarray
     rdm: ndarray
 
@@ -177,23 +199,65 @@ def rdm_similarity(ref_rdms, rdm):
     -------
 
     """
-    ref_rdms = np.atleast_2d(np.array(ref_rdms, copy=False))
-    assert len(ref_rdms.shape) == 2  # this is K x N
-    # if not, actually spearmanr will return a scalar instead.
-    assert ref_rdms.shape[0] >= 2, 'at least two ref rdms or more'
-    rdm = np.atleast_2d(rdm.ravel())  # this is 1 x N
-    rdm_similarities = spearmanr(ref_rdms, rdm, axis=1).correlation[-1, :-1]
+    if similarity_type == 'spearman' and computation_method is None:
+        computation_method = 'spearmanr'
+
+    ref_rdms = np.atleast_2d(np.asarray(ref_rdms))
+    # deal with case like returning a tuple of stuff.
+    rdm = np.asarray(rdm)
+    assert type(rdm) == np.ndarray and type(ref_rdms) == np.ndarray
+    assert ref_rdms.ndim == 2
+    if not rdm_as_list:
+        rdm = np.atleast_2d(rdm.ravel())  # this is 1 x N
+    assert rdm.ndim == 2
+    if computation_method == 'spearmanr':
+        assert similarity_type == 'spearman'
+        assert not rdm_as_list, 'only supporting one by one!'
+        # if not, actually spearmanr will return a scalar instead.
+        assert ref_rdms.shape[0] >= 2, 'at least two ref rdms or more'
+        rdm_similarities = spearmanr(ref_rdms, rdm, axis=1).correlation[-1, :-1]
+    elif computation_method == 'rankdata+cdist':
+        assert similarity_type == 'spearman'
+        # do rank transform first, and then compute pearson.
+        ref_rdms_ranked = np.array([rankdata(ref_rdm_this) for ref_rdm_this in ref_rdms])
+        if not rdm_as_list:
+            rdm_ranked = np.atleast_2d(rankdata(rdm.ravel()))
+        else:
+            rdm_ranked = np.array([rankdata(rdm_this) for rdm_this in rdm])
+        rdm_similarities = 1 - cdist(rdm_ranked, ref_rdms_ranked, 'correlation')
+    else:
+        raise ValueError('unsupported computation method {}'.format(computation_method))
+
+    # rdm_similarities will be either a 1d stuff if not rdm_as_list, or a 2d stuff if rdm_as_list.
+    assert rdm_similarities.ndim == 1 or rdm_similarities.ndim == 2
+    if not rdm_as_list:
+        rdm_similarities = rdm_similarities.ravel()
+    else:
+        assert rdm_similarities.ndim == 2
+
     return rdm_similarities
 
 
-def rdm_similarity_batch(ref_rdms, model_rdms, parallel=False, n_jobs=4):
+def rdm_similarity_batch(ref_rdms, model_rdms, parallel=False, n_jobs=4, similarity_type='spearman',
+                         computation_method=None, rdm_as_list=False, max_nbytes=None):
+    rdm_similarity_partial = partial(rdm_similarity, similarity_type=similarity_type,
+                                     computation_method=computation_method,
+                                     rdm_as_list=rdm_as_list)
     if parallel:
         # disable memmap, due to <https://github.com/numpy/numpy/issues/6750>
-        result = Parallel(n_jobs=n_jobs, verbose=5, max_nbytes=None)(
-            delayed(rdm_similarity)(ref_rdms, rdm) for rdm in model_rdms)
+        # well, I found that as long as you make sure you get ndarray, not subclass of it, it's mostly fine.
+        result = Parallel(n_jobs=n_jobs, verbose=5, max_nbytes=max_nbytes)(
+            delayed(rdm_similarity_partial)(ref_rdms, rdm) for rdm in model_rdms)
     else:
-        result = [rdm_similarity(ref_rdms, rdm) for rdm in model_rdms]
-    return np.array(result)
+        result = [rdm_similarity_partial(ref_rdms, rdm) for rdm in model_rdms]
+
+    if not rdm_as_list:
+        result = np.array(result)  # result is model rdm x ref rdm.
+    else:
+        result = np.concatenate(result, axis=0)
+
+    assert result.ndim == 2
+    return result
 
 
 def rdm_similarity_batch_over_splits(ref_rdms_list, model_rdms, parallel=False, n_jobs=4):
@@ -235,3 +299,7 @@ def rdm_similarity_batch_over_splits(ref_rdms_list, model_rdms, parallel=False, 
     assert correlation_matrix.shape == (len(model_rdms) * (len(model_rdms) - 1) // 2,)
 
     return mean_array, std_array, raw_array, correlation_matrix
+
+
+def bootstrap_rdm(ref_rdm, n=1000, ):
+    pass
