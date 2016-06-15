@@ -1,6 +1,7 @@
 from __future__ import absolute_import, division, print_function
 import unittest
-from early_vision_toolbox.rsa import compute_rdm_bounds, rdm_similarity_batch, rdm_relatedness_test
+from early_vision_toolbox.rsa import (compute_rdm_bounds, rdm_similarity_batch,
+                                      rdm_relatedness_test, bootstrap_rdm, compute_rdm)
 import numpy as np
 import h5py
 from scipy.spatial.distance import squareform, pdist
@@ -91,13 +92,32 @@ class MyTestCase(unittest.TestCase):
             similarity_matrix_ref = rdm_similarity_batch(ref_rdms, cand_rdms, computation_method='spearmanr').mean(
                 axis=1)
             p_val_this = rdm_relatedness_test(mean_ref_rdm=ref_rdms.mean(axis=0), model_rdms=cand_rdms,
-                                              similarity_matrix_ref=similarity_matrix_ref,
+                                              similarity_ref=similarity_matrix_ref,
                                               n=100, perm_idx_list=index_matrix_array[:, :, i_case].T - 1)
             p_val_ref = p_value_array[:, i_case]
             assert p_val_this.shape == p_val_ref.shape
             # print(p_val_this - p_val_ref)
             #print(abs(p_val_this - p_val_ref).max())
             self.assertTrue(np.allclose(p_val_this, p_val_ref))
+
+    def test_rsa_bootstrap(self):
+        """ test bootstrapping of rdm
+
+        Returns
+        -------
+
+        """
+        size_rdm = 500
+        ref_rdms = [compute_rdm(np.random.randn(size_rdm,200)), compute_rdm(np.random.randn(size_rdm,200)),
+                    compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200))]
+        model_rdms = [compute_rdm(np.random.randn(size_rdm,200)), compute_rdm(np.random.randn(size_rdm,200)),
+                      compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200)),
+                      compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200)),
+                      compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200)),
+                      compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200)),
+                      compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200))]
+        mean_similarity = rdm_similarity_batch(ref_rdms, model_rdms).mean(axis=1)
+        bootstrap_rdm(ref_rdms, model_rdms, mean_similarity, n=1000)
 
 
 if __name__ == '__main__':

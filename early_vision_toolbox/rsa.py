@@ -8,6 +8,7 @@ from joblib import Parallel, delayed
 from scipy.stats import rankdata
 from functools import partial
 from early_vision_toolbox.util import grouper
+from itertools import izip
 
 
 def compute_rdm_list(X, split_k=2, split_rng_state=None, noise_level=None, noise_rng_state=None, debug=False):
@@ -212,6 +213,7 @@ def rdm_similarity(ref_rdms, rdm, similarity_type='spearman', computation_method
     if not rdm_as_list:
         rdm = np.atleast_2d(rdm.ravel())  # this is 1 x N
     assert rdm.ndim == 2
+    assert rdm.shape[1] == ref_rdms.shape[1]
     if computation_method == 'spearmanr':
         assert similarity_type == 'spearman'
         assert not rdm_as_list, 'only supporting one by one!'
@@ -306,7 +308,7 @@ def rdm_similarity_batch_over_splits(ref_rdms_list, model_rdms, parallel=False, 
         print('done split {}/{}'.format(i + 1, n_iter))
 
     raw_array = np.array(raw_array)
-    #print(raw_array.shape)
+    # print(raw_array.shape)
     assert raw_array.shape == (n_iter, len(model_rdms), n_total_rdm_each)
 
     similarity_array = np.mean(raw_array, axis=2)
@@ -323,7 +325,7 @@ def rdm_similarity_batch_over_splits(ref_rdms_list, model_rdms, parallel=False, 
     return mean_array, std_array, raw_array, correlation_matrix
 
 
-def rdm_relatedness_test(mean_ref_rdm, model_rdms, similarity_matrix_ref,
+def rdm_relatedness_test(mean_ref_rdm, model_rdms, similarity_ref,
                          n=1000, similarity_type='spearman', computation_method='rankdata+cdist',
                          batch_size=50, rng_state_seed=None, parallel=True, n_jobs=4, max_nbytes=None,
                          perm_idx_list=None):  # for debug.
@@ -361,7 +363,7 @@ def rdm_relatedness_test(mean_ref_rdm, model_rdms, similarity_matrix_ref,
     assert rdm_h == rdm_w
     model_rdms = np.asarray(model_rdms)
     assert model_rdms.ndim == 2 and model_rdms.shape[1] == mean_ref_rdm.size
-    assert similarity_matrix_ref.shape == (model_rdms.shape[0],)
+    assert similarity_ref.shape == (model_rdms.shape[0],)
 
     # then let's get n
     rng_state = np.random.RandomState(rng_state_seed)
@@ -371,7 +373,7 @@ def rdm_relatedness_test(mean_ref_rdm, model_rdms, similarity_matrix_ref,
             perm_idx_this = rng_state.permutation(rdm_h)
         else:
             perm_idx_this = perm_idx_list[i_iter]
-        assert perm_idx_this.shape == (rdm_h, )
+        assert perm_idx_this.shape == (rdm_h,)
         mean_ref_rdm_list.append(squareform(mean_ref_rdm_square[np.ix_(perm_idx_this, perm_idx_this)]))
     mean_ref_rdm_list = np.array(mean_ref_rdm_list)
     assert mean_ref_rdm_list.shape == (n, model_rdms.shape[1])
@@ -388,7 +390,150 @@ def rdm_relatedness_test(mean_ref_rdm, model_rdms, similarity_matrix_ref,
     else:
         raise ValueError('unsupported computation method!')
     # print(similarity_matrix_null[0])
-    similarity_matrix_null = np.concatenate([similarity_matrix_null, similarity_matrix_ref[np.newaxis, :]], axis=0)
+    similarity_matrix_null = np.concatenate([similarity_matrix_null, similarity_ref[np.newaxis, :]], axis=0)
     # in the original implementation, similarity_matrix_ref them selves are part of sample.
-    result = 1 - np.mean(similarity_matrix_null < similarity_matrix_ref, axis=0)
+    result = 1 - np.mean(similarity_matrix_null < similarity_ref, axis=0)
     return result
+
+
+def bootstrap_rdm_helper(perm_idx, ref_rdms_square, model_rdms_square, n_model_rdm, similarity_type,
+                         computation_method):
+    model_rdms_square_this = model_rdms_square[np.ix_(np.arange(n_model_rdm), perm_idx[1], perm_idx[1])]
+    ref_rdms_square_this = ref_rdms_square[np.ix_(perm_idx[0], perm_idx[1], perm_idx[1])]
+
+    # then flatten the images.
+    mean_ref_rdms_this = np.asarray([squareform(x) for x in ref_rdms_square_this]).mean(axis=0)
+    model_rdms_this = np.asarray([squareform(y) for y in model_rdms_square_this])
+
+    # then compute the similarity!
+    similarity_this_bootstrap = rdm_similarity(model_rdms_this, mean_ref_rdms_this,
+                                               similarity_type=similarity_type,
+                                               computation_method=computation_method)
+    assert similarity_this_bootstrap.shape == (n_model_rdm,)
+    return similarity_this_bootstrap
+
+
+def bootstrap_rdm(ref_rdms, model_rdms, similarity_ref,
+                  n=1000, similarity_type='spearman',
+                  rng_state_subject_seed=None,
+                  rng_state_condition_seed=None,
+                  bootstrap_subject=False,
+                  bootstrap_condition=True,
+                  one_side=False,
+                  parallel=True, n_jobs=-1, max_nbytes='1M',
+                  computation_method=None,
+                  perm_idx_list=None,
+                  legacy=False):
+    """
+
+    Parameters
+    ----------
+    legacy : bool
+        whether use the legacy method exactly as in rsatoolbox. if this is true, then `one_side` must be true.
+    one_side : bool
+        doing one-side p test or two sides, which can be more conservative.
+    ref_rdms
+    model_rdms
+    similarity_ref
+    n
+    similarity_type
+    rng_state_subject_seed
+    rng_state_condition_seed
+    bootstrap_subject
+    bootstrap_condition
+    parallel
+    n_jobs
+    max_nbytes
+    perm_idx_list: this should be a list of 1d array indices when only one of bootstrap_subject and bootstrap_subject
+        is true, and a list of 2d array indices when both of them are true.
+
+    Returns
+    -------
+    a (len(model_rdms), len(model_rdms)) matrix returning the raw p values for each pair of models.
+
+    """
+    assert bootstrap_subject or bootstrap_condition, 'you must do bootstrap on something!'
+    if legacy:
+        assert not one_side, "legacy p-value computation only supports two side computation"
+    # let's create reshaped rdms.
+    ref_rdms_square = []
+    model_rdms_square = []
+    for ref_rdm in ref_rdms:
+        assert ref_rdm.ndim == 1
+        ref_rdms_square.append(squareform(ref_rdm))
+
+    for model_rdm in model_rdms:  # here this model_rdms can be any iterable returing a 1d model rdm every time.
+        assert model_rdm.ndim == 1
+        model_rdms_square.append(squareform(model_rdm))
+
+    ref_rdms_square = np.asarray(ref_rdms_square)
+    model_rdms_square = np.asarray(model_rdms_square)
+
+    assert ref_rdms_square.ndim == 3 and model_rdms_square.ndim == 3
+    n_ref_rdm = ref_rdms_square.shape[0]
+    n_model_rdm = model_rdms_square.shape[0]
+    assert similarity_ref.shape == (n_model_rdm, )
+    rdm_h, rdm_w = ref_rdms_square.shape[1:]
+    assert (rdm_h, rdm_w) == model_rdms_square.shape[1:]
+
+    if perm_idx_list is None:
+        rng_state_subject = np.random.RandomState(rng_state_subject_seed)
+        rng_state_condition = np.random.RandomState(rng_state_condition_seed)
+        if bootstrap_subject:
+            perm_idx_list_subject_generator = (rng_state_subject.permutation(n_ref_rdm) for _ in range(n))
+        else:
+            perm_idx_list_subject_generator = (np.arange(n_ref_rdm) for _ in range(n))
+
+        if bootstrap_condition:
+            perm_idx_list_condition_generator = (rng_state_condition.permutation(rdm_h) for _ in range(n))
+        else:
+            perm_idx_list_condition_generator = (np.arange(rdm_h) for _ in range(n))
+
+        # subject then condition.
+        perm_idx_list = izip(perm_idx_list_subject_generator, perm_idx_list_condition_generator)
+
+    bootstrap_rdm_helper_partial = partial(bootstrap_rdm_helper,
+                                           n_model_rdm=n_model_rdm,
+                                           similarity_type=similarity_type,
+                                           computation_method=computation_method)
+
+    # then collect all.
+    if parallel:
+        similarity_all_bootstrap = Parallel(n_jobs=n_jobs, verbose=5, max_nbytes=max_nbytes)(
+            delayed(bootstrap_rdm_helper_partial)(perm_idx, ref_rdms_square, model_rdms_square) for perm_idx in
+            perm_idx_list)
+    else:
+        similarity_all_bootstrap = [bootstrap_rdm_helper_partial(perm_idx, ref_rdms_square, model_rdms_square) for
+                                    perm_idx in perm_idx_list]
+    similarity_all_bootstrap = np.asarray(similarity_all_bootstrap).T
+    assert similarity_all_bootstrap.shape == (n_model_rdm, n)
+
+    # then let's do the statistical analysis.
+    # use ddof to be 1 to be more correct, since we are now doing statistical analysis.
+    error_bars = similarity_all_bootstrap.std(axis=1, ddof=1)
+    assert error_bars.shape == (n_model_rdm,)
+    pairwise_p_matrix = np.empty((n_model_rdm, n_model_rdm))
+
+    p_matrix_it = np.nditer(pairwise_p_matrix, flags=['multi_index'], op_flags=[['writeonly']])
+    while not p_matrix_it.finished:
+        i_row, j_col = p_matrix_it.multi_index
+        if i_row == j_col:
+            p_matrix_it[0] = np.nan
+        else:
+            # get the differences.
+            similarity_diff = similarity_ref[i_row] - similarity_ref[j_col]
+            similarity_diff_bootstrap = similarity_all_bootstrap[i_row] - similarity_all_bootstrap[j_col]
+            similarity_diff_bootstrap_normed = similarity_diff_bootstrap - similarity_diff_bootstrap.mean()
+            if one_side:
+                p_matrix_it[0] = np.mean(similarity_diff_bootstrap_normed > similarity_diff)
+            else:
+                if legacy:
+                    p_matrix_it[0] = 2 * min(np.mean(similarity_diff_bootstrap < 0),
+                                             np.mean(similarity_diff_bootstrap > 0))
+                else:
+                    p_matrix_it[0] = np.mean(abs(similarity_diff_bootstrap_normed) > abs(similarity_diff))
+        p_matrix_it.iternext()
+
+    return {'bootstrap_similarity': similarity_all_bootstrap,
+            'bootstrap_std': error_bars,
+            'pairwise_p_matrix': pairwise_p_matrix}
