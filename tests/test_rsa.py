@@ -1,11 +1,12 @@
 from __future__ import absolute_import, division, print_function
 import unittest
-from early_vision_toolbox.rsa import compute_rdm_bounds, rdm_similarity, rdm_similarity_batch
+from early_vision_toolbox.rsa import compute_rdm_bounds, rdm_similarity_batch, rdm_relatedness_test
 import numpy as np
 import h5py
 from scipy.spatial.distance import squareform, pdist
 import time
 from early_vision_toolbox.util import grouper
+from scipy.io import loadmat
 
 
 class Timer(object):
@@ -69,6 +70,35 @@ class MyTestCase(unittest.TestCase):
             self.assertTrue(np.allclose(a, b))
             print(i_test)
 
+    def test_rsa_relatedness(self):
+        ref_mat = loadmat('rsa_ref/debug_rsa_relatedness.mat')
+        rdm_stack_all = ref_mat['rdm_stack_all']
+        cand_rdm_stack_all = ref_mat['cand_rdm_stack_all']
+        index_matrix_array = ref_mat['index_matrix_array']
+        p_value_array = ref_mat['p_value_array']
+        # print(rdm_stack_all.shape, cand_rdm_stack_all.shape, index_matrix_array.shape, p_value_array.shape)
+
+        for i_case in range(p_value_array.shape[-1]):
+            ref_rdms = rdm_stack_all[:, :, :, i_case]
+
+            if i_case % 2 != 0:
+                ref_rdms = ref_rdms[:, :, :1]  # check singular case.
+
+            ref_rdms = np.array([squareform(ref_rdms[:, :, x]) for x in range(ref_rdms.shape[2])])
+            cand_rdms = cand_rdm_stack_all[:, :, :, i_case]
+            cand_rdms = np.array([squareform(cand_rdms[:, :, x]) for x in range(cand_rdms.shape[2])])
+            # compute similarity.
+            similarity_matrix_ref = rdm_similarity_batch(ref_rdms, cand_rdms, computation_method='spearmanr').mean(
+                axis=1)
+            p_val_this = rdm_relatedness_test(mean_ref_rdm=ref_rdms.mean(axis=0), model_rdms=cand_rdms,
+                                              similarity_matrix_ref=similarity_matrix_ref,
+                                              n=100, perm_idx_list=index_matrix_array[:, :, i_case].T - 1)
+            p_val_ref = p_value_array[:, i_case]
+            assert p_val_this.shape == p_val_ref.shape
+            # print(p_val_this - p_val_ref)
+            #print(abs(p_val_this - p_val_ref).max())
+            self.assertTrue(np.allclose(p_val_this, p_val_ref))
+
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(failfast=True)

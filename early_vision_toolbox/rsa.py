@@ -7,6 +7,8 @@ from scipy.stats import spearmanr
 from joblib import Parallel, delayed
 from scipy.stats import rankdata
 from functools import partial
+from early_vision_toolbox.util import grouper
+
 
 def compute_rdm_list(X, split_k=2, split_rng_state=None, noise_level=None, noise_rng_state=None, debug=False):
     """
@@ -214,8 +216,11 @@ def rdm_similarity(ref_rdms, rdm, similarity_type='spearman', computation_method
         assert similarity_type == 'spearman'
         assert not rdm_as_list, 'only supporting one by one!'
         # if not, actually spearmanr will return a scalar instead.
-        assert ref_rdms.shape[0] >= 2, 'at least two ref rdms or more'
-        rdm_similarities = spearmanr(ref_rdms, rdm, axis=1).correlation[-1, :-1]
+        if ref_rdms.shape[0] >= 2:
+            rdm_similarities = spearmanr(ref_rdms, rdm, axis=1).correlation[-1, :-1]
+        else:
+            # print('singular path!')
+            rdm_similarities = np.atleast_1d(spearmanr(ref_rdms, rdm, axis=1).correlation)
     elif computation_method == 'rankdata+cdist':
         assert similarity_type == 'spearman'
         # do rank transform first, and then compute pearson.
@@ -240,6 +245,23 @@ def rdm_similarity(ref_rdms, rdm, similarity_type='spearman', computation_method
 
 def rdm_similarity_batch(ref_rdms, model_rdms, parallel=False, n_jobs=4, similarity_type='spearman',
                          computation_method=None, rdm_as_list=False, max_nbytes=None):
+    """
+
+    Parameters
+    ----------
+    ref_rdms
+    model_rdms
+    parallel
+    n_jobs
+    similarity_type
+    computation_method
+    rdm_as_list
+    max_nbytes
+
+    Returns
+    -------
+
+    """
     rdm_similarity_partial = partial(rdm_similarity, similarity_type=similarity_type,
                                      computation_method=computation_method,
                                      rdm_as_list=rdm_as_list)
@@ -284,7 +306,7 @@ def rdm_similarity_batch_over_splits(ref_rdms_list, model_rdms, parallel=False, 
         print('done split {}/{}'.format(i + 1, n_iter))
 
     raw_array = np.array(raw_array)
-    print(raw_array.shape)
+    #print(raw_array.shape)
     assert raw_array.shape == (n_iter, len(model_rdms), n_total_rdm_each)
 
     similarity_array = np.mean(raw_array, axis=2)
@@ -301,5 +323,72 @@ def rdm_similarity_batch_over_splits(ref_rdms_list, model_rdms, parallel=False, 
     return mean_array, std_array, raw_array, correlation_matrix
 
 
-def bootstrap_rdm(ref_rdm, n=1000, ):
-    pass
+def rdm_relatedness_test(mean_ref_rdm, model_rdms, similarity_matrix_ref,
+                         n=1000, similarity_type='spearman', computation_method='rankdata+cdist',
+                         batch_size=50, rng_state_seed=None, parallel=True, n_jobs=4, max_nbytes=None,
+                         perm_idx_list=None):  # for debug.
+    """relatedness of RDM, using randomization test as in rsatoolbox
+
+    basically, do randomization on ref rdm.
+
+    Parameters
+    ----------
+    batch_size : int
+        batch size for when computation_method == 'rankdata+cdist'
+    mean_ref_rdm
+    model_rdms
+    n
+    similarity_type
+    computation_method
+    parallel
+    n_jobs
+
+    Returns
+    -------
+    an array of shape (len(model_rdms),) containing the p values. Here uncorrected ones are used, for two reasons.
+    1) looks like is the one used in Kregeskrote's DEMO1 in
+    rsatoolbox code, used in their rsatoolbox paper (10.1371/journal.pcbi.1003553), as well as their CNN vs IT paper
+    (10.1371/journal.pcbi.1003915), where neither of FDR nor FWE was mentioned.
+    2) I can't make sense of their FWE correction code. there's no reference for it.
+    If really some correction is needed, simply go to call p.adjust from R, and use whatever you like...
+    https://stat.ethz.ch/R-manual/R-devel/library/stats/html/p.adjust.html.
+
+    """
+    # first, compute mean ref_rdms.
+    mean_ref_rdm = np.asarray(mean_ref_rdm).ravel()
+    mean_ref_rdm_square = squareform(mean_ref_rdm)
+    rdm_h, rdm_w = mean_ref_rdm_square.shape
+    assert rdm_h == rdm_w
+    model_rdms = np.asarray(model_rdms)
+    assert model_rdms.ndim == 2 and model_rdms.shape[1] == mean_ref_rdm.size
+    assert similarity_matrix_ref.shape == (model_rdms.shape[0],)
+
+    # then let's get n
+    rng_state = np.random.RandomState(rng_state_seed)
+    mean_ref_rdm_list = []
+    for i_iter in range(n):
+        if perm_idx_list is None:
+            perm_idx_this = rng_state.permutation(rdm_h)
+        else:
+            perm_idx_this = perm_idx_list[i_iter]
+        assert perm_idx_this.shape == (rdm_h, )
+        mean_ref_rdm_list.append(squareform(mean_ref_rdm_square[np.ix_(perm_idx_this, perm_idx_this)]))
+    mean_ref_rdm_list = np.array(mean_ref_rdm_list)
+    assert mean_ref_rdm_list.shape == (n, model_rdms.shape[1])
+
+    # them compute all stuff.
+    if computation_method == 'rankdata+cdist':
+        # do batch stuff. notice I need to swap model rdm and mean rdm.
+        similarity_matrix_null = rdm_similarity_batch(model_rdms, grouper(mean_ref_rdm_list, batch_size),
+                                                      similarity_type=similarity_type,
+                                                      computation_method=computation_method, parallel=parallel,
+                                                      n_jobs=n_jobs, rdm_as_list=True, max_nbytes=max_nbytes)
+        # after .T, we get a (n, model_rdms.shape[0]) matrix.
+        assert similarity_matrix_null.shape == (n, model_rdms.shape[0])
+    else:
+        raise ValueError('unsupported computation method!')
+    # print(similarity_matrix_null[0])
+    similarity_matrix_null = np.concatenate([similarity_matrix_null, similarity_matrix_ref[np.newaxis, :]], axis=0)
+    # in the original implementation, similarity_matrix_ref them selves are part of sample.
+    result = 1 - np.mean(similarity_matrix_null < similarity_matrix_ref, axis=0)
+    return result
