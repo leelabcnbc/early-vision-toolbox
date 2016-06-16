@@ -452,9 +452,9 @@ def bootstrap_rdm(ref_rdms, model_rdms, similarity_ref,
     a (len(model_rdms), len(model_rdms)) matrix returning the raw p values for each pair of models.
 
     """
-    assert bootstrap_subject or bootstrap_condition, 'you must do bootstrap on something!'
-    if legacy:
-        assert not one_side, "legacy p-value computation only supports two side computation"
+    if perm_idx_list is None:
+        # with perm_idx_list, it's your own adventure.
+        assert bootstrap_subject or bootstrap_condition, 'you must do bootstrap on something, unless you have idx list'
     # let's create reshaped rdms.
     ref_rdms_square = []
     model_rdms_square = []
@@ -472,20 +472,27 @@ def bootstrap_rdm(ref_rdms, model_rdms, similarity_ref,
     assert ref_rdms_square.ndim == 3 and model_rdms_square.ndim == 3
     n_ref_rdm = ref_rdms_square.shape[0]
     n_model_rdm = model_rdms_square.shape[0]
-    assert similarity_ref.shape == (n_model_rdm, )
+
+    if legacy:
+        assert not one_side, "legacy p-value computation only supports two side computation"
+        if similarity_ref is None:  # for legacy, you can specify it to None
+            similarity_ref = np.zeros((n_model_rdm,))
+
+    assert similarity_ref.shape == (n_model_rdm,)
     rdm_h, rdm_w = ref_rdms_square.shape[1:]
-    assert (rdm_h, rdm_w) == model_rdms_square.shape[1:]
+    assert (rdm_h, rdm_w) == model_rdms_square.shape[1:] and rdm_h == rdm_w
 
     if perm_idx_list is None:
         rng_state_subject = np.random.RandomState(rng_state_subject_seed)
         rng_state_condition = np.random.RandomState(rng_state_condition_seed)
         if bootstrap_subject:
-            perm_idx_list_subject_generator = (rng_state_subject.permutation(n_ref_rdm) for _ in range(n))
+            perm_idx_list_subject_generator = (rng_state_subject.randint(n_ref_rdm, size=(n_ref_rdm,)) for _ in
+                                               range(n))
         else:
             perm_idx_list_subject_generator = (np.arange(n_ref_rdm) for _ in range(n))
 
         if bootstrap_condition:
-            perm_idx_list_condition_generator = (rng_state_condition.permutation(rdm_h) for _ in range(n))
+            perm_idx_list_condition_generator = (rng_state_condition.randint(rdm_h, size=(rdm_h,)) for _ in range(n))
         else:
             perm_idx_list_condition_generator = (np.arange(rdm_h) for _ in range(n))
 
@@ -515,13 +522,15 @@ def bootstrap_rdm(ref_rdms, model_rdms, similarity_ref,
     pairwise_p_matrix = np.empty((n_model_rdm, n_model_rdm))
 
     p_matrix_it = np.nditer(pairwise_p_matrix, flags=['multi_index'], op_flags=[['writeonly']])
+    similarity_ref_diff = similarity_ref[:, np.newaxis] - similarity_ref[np.newaxis, :]
+    assert similarity_ref_diff.shape == (n_model_rdm, n_model_rdm)
     while not p_matrix_it.finished:
         i_row, j_col = p_matrix_it.multi_index
         if i_row == j_col:
             p_matrix_it[0] = np.nan
         else:
             # get the differences.
-            similarity_diff = similarity_ref[i_row] - similarity_ref[j_col]
+            similarity_diff = similarity_ref_diff[i_row, j_col]
             similarity_diff_bootstrap = similarity_all_bootstrap[i_row] - similarity_all_bootstrap[j_col]
             similarity_diff_bootstrap_normed = similarity_diff_bootstrap - similarity_diff_bootstrap.mean()
             if one_side:

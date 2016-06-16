@@ -97,7 +97,7 @@ class MyTestCase(unittest.TestCase):
             p_val_ref = p_value_array[:, i_case]
             assert p_val_this.shape == p_val_ref.shape
             # print(p_val_this - p_val_ref)
-            #print(abs(p_val_this - p_val_ref).max())
+            # print(abs(p_val_this - p_val_ref).max())
             self.assertTrue(np.allclose(p_val_this, p_val_ref))
 
     def test_rsa_bootstrap(self):
@@ -107,17 +107,52 @@ class MyTestCase(unittest.TestCase):
         -------
 
         """
-        size_rdm = 500
-        ref_rdms = [compute_rdm(np.random.randn(size_rdm,200)), compute_rdm(np.random.randn(size_rdm,200)),
-                    compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200))]
-        model_rdms = [compute_rdm(np.random.randn(size_rdm,200)), compute_rdm(np.random.randn(size_rdm,200)),
-                      compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200)),
-                      compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200)),
-                      compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200)),
-                      compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200)),
-                      compute_rdm(np.random.randn(size_rdm, 200)), compute_rdm(np.random.randn(size_rdm,200))]
-        mean_similarity = rdm_similarity_batch(ref_rdms, model_rdms).mean(axis=1)
-        bootstrap_rdm(ref_rdms, model_rdms, mean_similarity, n=1000)
+        ref_mat = loadmat('rsa_ref/debug_rsa_bootstrap.mat')
+        rdm_stack_all = ref_mat['rdm_stack_all']
+        cand_rdm_stack_all = ref_mat['cand_rdm_stack_all']
+        index_matrix_array_condition = ref_mat['index_matrix_array_condition']
+        index_matrix_array_subject = ref_mat['index_matrix_array_subject']
+        p_value_array = ref_mat['p_value_array']
+        bootstrap_e_array = ref_mat['bootstrap_e_array']
+        # print(rdm_stack_all.shape, cand_rdm_stack_all.shape, index_matrix_array.shape, p_value_array.shape)
+        similarity_array = ref_mat['similarity_array']
+        for i_case in range(p_value_array.shape[-1]):
+            ref_rdms = rdm_stack_all[:, :, :, i_case]
+
+            index_matrix_array_condition_this = index_matrix_array_condition[:, :, i_case]
+            index_matrix_array_subject_this = index_matrix_array_subject[:, :, i_case]
+
+            if i_case % 2 != 0:
+                ref_rdms = ref_rdms[:, :, :1]  # check singular case.
+                index_matrix_array_subject_this = index_matrix_array_subject_this[:, :1]
+
+            # construct perm_idx_list
+            perm_idx_list = zip(index_matrix_array_subject_this - 1, index_matrix_array_condition_this - 1)
+            assert len(perm_idx_list) == 250
+
+            ref_rdms = np.array([squareform(ref_rdms[:, :, x]) for x in range(ref_rdms.shape[2])])
+            cand_rdms = cand_rdm_stack_all[:, :, :, i_case]
+            cand_rdms = np.array([squareform(cand_rdms[:, :, x]) for x in range(cand_rdms.shape[2])])
+            # compute similarity.
+            result_this = bootstrap_rdm(ref_rdms=ref_rdms, model_rdms=cand_rdms, similarity_ref=None,
+                                        n=250, legacy=True, perm_idx_list=perm_idx_list)
+            p_val_ref = p_value_array[:, :, i_case]
+            p_val_this = result_this['pairwise_p_matrix']
+            assert p_val_this.shape == p_val_ref.shape and p_val_ref.dtype == p_val_this.dtype
+            # print(p_val_this - p_val_ref)
+            self.assertTrue(np.allclose(p_val_this, p_val_ref, equal_nan=True))
+            # print(p_val_this)
+            # print(abs(p_val_this[np.isfinite(p_val_this)] - p_val_ref[np.isfinite(p_val_ref)]).max())
+            bootstrap_e_ref = bootstrap_e_array[:, i_case]
+            bootstrap_e_this = result_this['bootstrap_std']
+            assert bootstrap_e_ref.shape == bootstrap_e_this.shape and bootstrap_e_ref.dtype == bootstrap_e_this.dtype
+            self.assertTrue(np.allclose(bootstrap_e_ref, bootstrap_e_this))
+            # print(bootstrap_e_ref - bootstrap_e_this)
+            similarity_this = result_this['bootstrap_similarity']
+            similarity_ref = similarity_array[:, :, i_case]
+            # print(abs(raw_similarity_ref - raw_similarity_this).max())
+            assert similarity_this.shape == similarity_ref.shape and similarity_this.dtype == similarity_ref.dtype
+            self.assertTrue(np.allclose(similarity_ref, similarity_this))
 
 
 if __name__ == '__main__':
