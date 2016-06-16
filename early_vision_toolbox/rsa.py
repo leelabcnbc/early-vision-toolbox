@@ -246,7 +246,7 @@ def rdm_similarity(ref_rdms, rdm, similarity_type='spearman', computation_method
 
 
 def rdm_similarity_batch(ref_rdms, model_rdms, parallel=False, n_jobs=4, similarity_type='spearman',
-                         computation_method=None, rdm_as_list=False, max_nbytes=None):
+                         computation_method=None, rdm_as_list=False, max_nbytes=None, verbose=5):
     """
 
     Parameters
@@ -270,7 +270,7 @@ def rdm_similarity_batch(ref_rdms, model_rdms, parallel=False, n_jobs=4, similar
     if parallel:
         # disable memmap, due to <https://github.com/numpy/numpy/issues/6750>
         # well, I found that as long as you make sure you get ndarray, not subclass of it, it's mostly fine.
-        result = Parallel(n_jobs=n_jobs, verbose=5, max_nbytes=max_nbytes)(
+        result = Parallel(n_jobs=n_jobs, verbose=verbose, max_nbytes=max_nbytes)(
             delayed(rdm_similarity_partial)(ref_rdms, rdm) for rdm in model_rdms)
     else:
         result = [rdm_similarity_partial(ref_rdms, rdm) for rdm in model_rdms]
@@ -284,7 +284,7 @@ def rdm_similarity_batch(ref_rdms, model_rdms, parallel=False, n_jobs=4, similar
     return result
 
 
-def rdm_similarity_batch_over_splits(ref_rdms_list, model_rdms, parallel=False, n_jobs=4):
+def rdm_similarity_batch_over_splits(ref_rdms_list, model_rdms, parallel=False, n_jobs=4, verbose=5):
     """ do `split_k`-way split for `iter` times, and then compute mean and std in the first and second return values,
     and return raw data in the third return value.
 
@@ -294,6 +294,7 @@ def rdm_similarity_batch_over_splits(ref_rdms_list, model_rdms, parallel=False, 
     :param n_jobs:
     :return:
     """
+    # TODO add full interface or rdm_similarity_batch
     raw_array = []
     n_iter = len(ref_rdms_list)
     n_total_rdm_each = None
@@ -303,9 +304,11 @@ def rdm_similarity_batch_over_splits(ref_rdms_list, model_rdms, parallel=False, 
             n_total_rdm_each = len(dataset)
         else:
             assert n_total_rdm_each == len(dataset)
-        similarity_matrix_this = rdm_similarity_batch(dataset, model_rdms, parallel=parallel, n_jobs=n_jobs)
+        similarity_matrix_this = rdm_similarity_batch(dataset, model_rdms, parallel=parallel, n_jobs=n_jobs,
+                                                      verbose=verbose)
         raw_array.append(similarity_matrix_this)
-        print('done split {}/{}'.format(i + 1, n_iter))
+        if verbose != 0:
+            print('done split {}/{}'.format(i + 1, n_iter))
 
     raw_array = np.array(raw_array)
     # print(raw_array.shape)
@@ -423,7 +426,8 @@ def bootstrap_rdm(ref_rdms, model_rdms, similarity_ref,
                   parallel=True, n_jobs=-1, max_nbytes='1M',
                   computation_method=None,
                   perm_idx_list=None,
-                  legacy=False):
+                  legacy=False,
+                  verbose=5):
     """
 
     Parameters
@@ -506,7 +510,7 @@ def bootstrap_rdm(ref_rdms, model_rdms, similarity_ref,
 
     # then collect all.
     if parallel:
-        similarity_all_bootstrap = Parallel(n_jobs=n_jobs, verbose=5, max_nbytes=max_nbytes)(
+        similarity_all_bootstrap = Parallel(n_jobs=n_jobs, verbose=verbose, max_nbytes=max_nbytes)(
             delayed(bootstrap_rdm_helper_partial)(perm_idx, ref_rdms_square, model_rdms_square) for perm_idx in
             perm_idx_list)
     else:
