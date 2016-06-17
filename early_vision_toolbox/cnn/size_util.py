@@ -370,9 +370,14 @@ def create_info_dict(info_dict_raw):
 layer_info_dict_dict = {key: create_info_dict(value) for key, value in layer_info_dict_raw.iteritems()}
 
 
-def create_size_helper(name_or_dict, input_size=None):
+def create_size_helper(name_or_dict, input_size=None, last_layer=None):
     if isinstance(name_or_dict, str):
         info_dict = deepcopy(layer_info_dict_dict[name_or_dict])
     else:
         info_dict = deepcopy(name_or_dict)
+    if last_layer is not None:
+        keys_all = list(info_dict.keys())
+        first_key_to_remove_idx = keys_all.index(last_layer)
+        for layer_to_remove in keys_all[first_key_to_remove_idx+1:]:
+            del info_dict[layer_to_remove]
     return CNNSizeHelper(info_dict, input_size)
