@@ -110,7 +110,24 @@ def log_transformer(images, bias, epsilon):
     return np.array(new_image_list)  # return as a 3d array.
 
 
-def getdata_imagearray(images, patchsize, numpatches, buff=0, pixelshiftx=0, seed=None, fixed_locations=None):
+def getdata_imagearray(images, patchsize, numpatches, buff=0, pixelshiftx=0, seed=None, fixed_locations=None,
+                       return_locations=False, verbose=True):
+    """ this can work with RGB images as well.
+
+    Parameters
+    ----------
+    images
+    patchsize
+    numpatches
+    buff
+    pixelshiftx
+    seed
+    fixed_locations
+
+    Returns
+    -------
+
+    """
     new_image_list = []
     if fixed_locations is not None:
         assert len(fixed_locations) == 1 or len(fixed_locations) == len(images)
@@ -130,12 +147,16 @@ def getdata_imagearray(images, patchsize, numpatches, buff=0, pixelshiftx=0, see
     else:
         sample_per_image = None
 
+    if return_locations:
+        location_list = []
+
     for idx, image in enumerate(images):
-        print("[{}/{}]".format(idx + 1, len(images)))
+        if verbose:
+            print("[{}/{}]".format(idx + 1, len(images)))
         if fixed_locations_flag:
             locations_this = fixed_locations[0] if fixed_locations_single else fixed_locations[idx]
         else:
-            height, width = image.shape
+            height, width = image.shape[:2]
             # determine how many points to sample.
             if idx + 1 < len(images):
                 sample_this_image = sample_per_image
@@ -151,12 +172,20 @@ def getdata_imagearray(images, patchsize, numpatches, buff=0, pixelshiftx=0, see
 
         # do patch extraction
         assert locations_this.ndim == 2 and locations_this.shape[1] == 2
+        if return_locations:
+            location_list.append(np.array(locations_this))  # copy it, and then make sure it's base array
+
         for loc in locations_this:
             patch_this = image[loc[0]:loc[0] + patchsize, loc[1]:loc[1] + patchsize]
             new_image_list.append(patch_this)
     result = np.array(new_image_list)  # return as a 3d array.
-    print("sampled shape:", result.shape)
-    return result
+    if verbose:
+        print("sampled shape:", result.shape)
+    if not return_locations:
+        return result
+    else:
+        assert len(location_list) == len(images)
+        return result, location_list  # second argument being location list of list
 
 
 def step_transformer_dispatch(step, step_pars):

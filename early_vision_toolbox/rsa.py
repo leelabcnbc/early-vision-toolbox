@@ -427,7 +427,8 @@ def bootstrap_rdm(ref_rdms, model_rdms, similarity_ref,
                   computation_method=None,
                   perm_idx_list=None,
                   legacy=False,
-                  verbose=5):
+                  verbose=5,
+                  debug=False):
     """
 
     Parameters
@@ -503,6 +504,9 @@ def bootstrap_rdm(ref_rdms, model_rdms, similarity_ref,
         # subject then condition.
         perm_idx_list = izip(perm_idx_list_subject_generator, perm_idx_list_condition_generator)
 
+        if debug:
+            perm_idx_list = list(perm_idx_list)
+
     bootstrap_rdm_helper_partial = partial(bootstrap_rdm_helper,
                                            n_model_rdm=n_model_rdm,
                                            similarity_type=similarity_type,
@@ -547,6 +551,9 @@ def bootstrap_rdm(ref_rdms, model_rdms, similarity_ref,
                     p_matrix_it[0] = np.mean(abs(similarity_diff_bootstrap_normed) > abs(similarity_diff))
         p_matrix_it.iternext()
 
-    return {'bootstrap_similarity': similarity_all_bootstrap,
-            'bootstrap_std': error_bars,
-            'pairwise_p_matrix': pairwise_p_matrix}
+    return_result = {'bootstrap_similarity': similarity_all_bootstrap,
+                     'bootstrap_std': error_bars,
+                     'pairwise_p_matrix': pairwise_p_matrix}
+    if debug:
+        return_result['perm_idx_list'] = perm_idx_list
+    return return_result
