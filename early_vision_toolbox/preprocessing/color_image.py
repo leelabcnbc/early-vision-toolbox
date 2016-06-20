@@ -9,6 +9,28 @@ from skimage.color import gray2rgb
 from skimage import img_as_float
 from numbers import Integral
 
+
+# I don't use Imagen itself because it's defined in terms of relative size, which is not very useful
+# in my case.
+def disk(x, y, height, gaussian_width):
+    """
+    Circular disk with Gaussian fall-off after the solid central region.
+    """
+    disk_radius = height / 2.0
+
+    distance_from_origin = np.sqrt(x ** 2 + y ** 2)
+    distance_outside_disk = distance_from_origin - disk_radius
+    sigmasq = gaussian_width * gaussian_width
+
+    if sigmasq == 0.0:
+        falloff = x * 0.0
+    else:
+        falloff = np.exp(np.divide(-distance_outside_disk * distance_outside_disk,
+                                   2 * sigmasq))
+    assert np.all(np.isfinite(falloff))
+    return np.where(distance_outside_disk <= 0, 1.0, falloff)
+
+
 FunctionTransformer = partial(FunctionTransformer, validate=False)  # turn off all validation.
 
 
@@ -16,8 +38,18 @@ def whole_image_preprocessing_pipeline_check_valid_steps(steps):
     pass
 
 
+def whole_image_aperture(im, size, gaussian_width, background_color):
+    height, width = im.shape[:2]
+    assert height == width
+    mesh_points = np.linspace(-height / 2, +height / 2, height)
+    X, Y = np.meshgrid(mesh_points, mesh_points)
+    mask = disk(X, Y, size, gaussian_width)
+    return im * mask[:, :, np.newaxis] + np.asarray(background_color) * (1.0 - mask[:, :, np.newaxis])
+
+
 def whole_image_normalize_format(imagelist):
     # make sure that everything is 3 channel, thus (most possibly) RGB stuff.
+    # TODO refactor this with `make_sure_rgb_image` in misc.
     imagelist_new = []
     for im in imagelist:
         # first convert dtype
@@ -54,6 +86,11 @@ def whole_image_step_transformer_dispatch(step, step_pars):
                                            external_jitter_list=step_pars['external_jitter_list'],
                                            strict=step_pars['strict'],
                                            crows=step_pars['crows'], ccols=step_pars['ccols']))
+    elif step == 'aperture':
+        return FunctionTransformer(
+            lambda x: [whole_image_aperture(im, step_pars['size'], step_pars['gaussian_width'],
+                                            step_pars['background_color']) for im in x]
+        )
     else:
         raise NotImplementedError('step {} is not implemented yet'.format(step))
 
@@ -67,7 +104,7 @@ def whole_image_preprocessing_pipeline(steps=None, pars=None):
     :return:
     """
 
-    canonical_order = ['normalize_format', 'resize', 'rescale', 'putInCanvas', 'specialEffects']
+    canonical_order = ['normalize_format', 'resize', 'rescale', 'putInCanvas', 'aperture']
     __step_set = frozenset(canonical_order)
 
     if steps is None:
@@ -78,7 +115,7 @@ def whole_image_preprocessing_pipeline(steps=None, pars=None):
                     'resize': {'imsize': (150, 150),  # default size in V1 like model
                                'order': 1},  # interpolation order. 1 means bilinear.
                     'putInCanvas': {'canvascolor': (0.5, 0.5, 0.5),  # gray color by default.
-                                    'jitter': False, # no jitter
+                                    'jitter': False,  # no jitter
                                     'jittermaxpixel': 0,  # trivial jitter.
                                     'jitterrandseed': None,
                                     'canvassize': (227, 227),  # default size for AlexNet.
@@ -88,7 +125,10 @@ def whole_image_preprocessing_pipeline(steps=None, pars=None):
                                     'ccols': None,  # center of the patch. better not change it. you need to check the
                                     # actual code to understand their behaviour completely.
                                     },
-                    'specialEffects': {'type': 'circular_window'},
+                    'aperture': {'size': None,  # diameter of the ring, in pixels.
+                                 'gaussian_width': 5,  # std of falling off, in pixels.
+                                 'background_color': (0.5, 0.5, 0.5)  # gray by default.
+                                 },
                     # TODO finish this circular window effect used in Tang's data
                     }
 
