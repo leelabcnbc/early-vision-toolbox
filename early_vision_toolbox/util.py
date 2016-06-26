@@ -6,6 +6,11 @@ import numpy as np
 import h5py
 from sklearn.preprocessing import maxabs_scale
 from itertools import product, izip_longest, islice
+from subprocess import check_call, CalledProcessError
+import os
+from tempfile import NamedTemporaryFile
+from pipes import quote
+
 
 def make_2d_input_matrix(imgs):
     # make flat, if not ndarray or at least 3d.
@@ -69,7 +74,6 @@ def grouper(iterable, n):
     return iter(lambda: list(islice(iterable, n)), [])
 
 
-
 def normalize_vector_inplace(x):
     """
     this inplace should be understood as best effort, not guaranteed.
@@ -106,7 +110,7 @@ def display_network(W, n_col=None, n_row=None, transpose=False, padding=1, image
     cell_height = image_shape[0] + 2 * padding
     cell_width = image_shape[1] + 2 * padding
     total_image = np.ones(shape=(n_row * cell_height, n_col * cell_width),
-                           dtype=np.float64)
+                          dtype=np.float64)
 
     for idx, (row_idx, col_idx) in enumerate(product(range(n_row), range(n_col))):
         if idx >= n_basis:
@@ -120,3 +124,28 @@ def display_network(W, n_col=None, n_row=None, transpose=False, padding=1, image
         total_image[position_to_plot] = cell_this
 
     return total_image
+
+
+def run_matlab_script_with_exeception_handling(script, matlab_executable='matlab'):
+    # basically, wrap stuff to run in a ME.
+    # save this file somewhere.
+    script_file = NamedTemporaryFile(mode='wt', suffix='.m', delete=False)
+    script_name = script_file.name
+    script_file.write(script)
+    script_file.close()
+    assert script_name == quote(script_name) and "'" not in script_name
+    assert os.path.isabs(script_name)
+    script_dir, script_pure = os.path.split(script_name)
+    script_pure = script_pure[:-2]
+    # hack around some wierd bug for `run`.
+    one_line_to_run = "try;cd('{}');{};catch ME;disp(ME);exit(1);end;disp('done calling!');exit;".format(script_dir,
+                                                                                                         script_pure)
+    things_to_call = [matlab_executable,
+                      '-nodesktop', '-nosplash', '-nodisplay', '-r', one_line_to_run]
+    print(' '.join(things_to_call))
+    try:
+        check_call(things_to_call)
+    finally:
+        # remote the temporary file
+        assert os.path.exists(script_name)
+        os.remove(script_name)
