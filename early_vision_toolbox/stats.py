@@ -2,7 +2,8 @@
 
 from __future__ import division, unicode_literals, print_function, absolute_import
 import numpy as np
-
+from numpy.fft import fftshift, fft2
+from scipy.signal import hamming
 
 def sparsity_measure_rolls(x, normalize=True, clip=True):
     """ return the sparsity measure.
@@ -95,3 +96,27 @@ def expoenential_fit(x, remove_zero=False, clip_lower=0.0, clip_upper=100.0, che
     if check:
         assert scale_this > 0, "scale must be greater than zero"
     return scale_this
+
+
+def power_spectrum(im, window=True, remove_dc=True):
+    assert im.ndim == 2 or im.ndim == 3
+    flag_2d = False
+    if im.ndim == 2:
+        flag_2d = True
+        im = im[np.newaxis, :, :]
+    n, h, w = im.shape
+    assert w == h
+    if window:  # add hamming window.
+        # create hamming window, by dot product of 2 1-d windows.
+        hamming_1d = hamming(w, sym=False)  # `periodic` in MATLAB equivalent.
+        hamming_2d = np.dot(hamming_1d[:, np.newaxis], hamming_1d[np.newaxis, :])
+        im = im * hamming_2d  # using broadcasting
+    if remove_dc:
+        im = im - np.mean(im, axis=(1, 2), keepdims=True)
+    fft_result = fft2(im)
+    raw_spectrum = abs(fftshift(fft_result, axes=(1, 2))) ** 2
+    assert raw_spectrum.shape == im.shape
+    if flag_2d:  # get back 2d
+        assert n == 1
+        raw_spectrum = raw_spectrum[0]
+    return raw_spectrum
