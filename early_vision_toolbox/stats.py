@@ -4,6 +4,8 @@ from __future__ import division, unicode_literals, print_function, absolute_impo
 import numpy as np
 from numpy.fft import fftshift, fft2
 from scipy.signal import hamming
+from skimage.color import rgb2gray
+
 
 def sparsity_measure_rolls(x, normalize=True, clip=True):
     """ return the sparsity measure.
@@ -99,6 +101,7 @@ def expoenential_fit(x, remove_zero=False, clip_lower=0.0, clip_upper=100.0, che
 
 
 def power_spectrum(im, window=True, remove_dc=True):
+    assert np.all(np.isfinite(im)), 'invalid numbers in input!'
     assert im.ndim == 2 or im.ndim == 3
     flag_2d = False
     if im.ndim == 2:
@@ -120,3 +123,19 @@ def power_spectrum(im, window=True, remove_dc=True):
         assert n == 1
         raw_spectrum = raw_spectrum[0]
     return raw_spectrum
+
+
+def power_spectrum_batch(ims, remove_dc=True, unit_std=False, pars_dict_inner=None):
+    if pars_dict_inner is None:
+        pars_dict_inner = dict()
+    # compute spectral signature!!!
+    ims_bw = np.asarray([rgb2gray(im) for im in ims])
+    # then remove dc.
+    assert ims_bw.ndim == 3
+    if remove_dc:
+        ims_bw = ims_bw - np.mean(ims_bw, axis=(1, 2), keepdims=True)
+    if unit_std:
+        ims_bw = ims_bw / np.std(ims_bw, axis=(1, 2), keepdims=True)
+    n_im, h, w = ims_bw.shape
+    assert h == w
+    return power_spectrum(ims_bw, **pars_dict_inner)

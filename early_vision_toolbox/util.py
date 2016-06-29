@@ -149,3 +149,25 @@ def run_matlab_script_with_exeception_handling(script, matlab_executable='matlab
         # remote the temporary file
         assert os.path.exists(script_name)
         os.remove(script_name)
+
+
+def compute_contour_levels(values, levels=(0.9, 0.8, 0.6)):
+    """this can compute the contour levels for a typical average power spectrum
+
+    the assumption is that spectrum fall off of the center, and the contours have roughly the same shape,
+    which is roughly true for power spectra of natural images.
+
+    levels specify the portion of energy you want each contour line to enclose. must be in decreasing order.
+    """
+    values = values.ravel()
+    values_sorted = np.sort(values)[::-1]
+    # then compute cumsum
+    values_sorted_cum = np.cumsum(values_sorted)
+    values_sorted_cum = values_sorted_cum / values_sorted_cum.max()
+    levels_out = []
+    for level in levels:
+        arg_min_match_level = np.argmin(abs(values_sorted_cum - level))
+        levels_out.append(values_sorted[arg_min_match_level])
+    levels_out = np.array(levels_out)
+    assert np.array_equal(np.sort(levels_out), levels_out)
+    return levels_out
