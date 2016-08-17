@@ -229,7 +229,8 @@ def step_transformer_dispatch(step, step_pars):
                                                buff=step_pars['random_buff'],
                                                pixelshiftx=step_pars['random_pixelshiftx'],
                                                seed=step_pars['random_seed'],
-                                               fixed_locations=step_pars['fixed_locations']))
+                                               fixed_locations=step_pars['fixed_locations'],
+                                               verbose=step_pars['verbose']))
         else:
             raise NotImplementedError("type {} not supported!".format(sampling_type))
     elif step == 'removeDC':
@@ -298,6 +299,7 @@ def bw_image_preprocessing_pipeline(steps=None, pars=None):
                                  'grid_order': 'C',
                                  'fixed_locations': None,  # should be an iterable of len 1 or len of images, each
                                  # being a n_patch x 2 array telling the row and column of top left corner.
+                                 'verbose': True
                                  },
                     'PCA': {'epsilon': 0.1,
                             'n_components': None  # keep all components.
