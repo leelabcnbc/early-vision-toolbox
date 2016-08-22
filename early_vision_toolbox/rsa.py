@@ -9,9 +9,11 @@ from scipy.stats import rankdata
 from functools import partial
 from early_vision_toolbox.util import grouper
 from itertools import izip
+from sklearn.metrics.pairwise import pairwise_distances
 
 
-def compute_rdm_list(X, split_k=2, split_rng_state=None, noise_level=None, noise_rng_state=None, debug=False):
+def compute_rdm_list(X, split_k=2, split_rng_state=None, noise_level=None, noise_rng_state=None,
+                     debug=False, method='scipy'):
     """
 
     :param X:
@@ -31,7 +33,8 @@ def compute_rdm_list(X, split_k=2, split_rng_state=None, noise_level=None, noise
         response_mean_this = X[:, split_set]
         if debug:
             print(response_mean_this.shape)
-        rdm_list.append(compute_rdm(response_mean_this, noise_level, rng_state=noise_rng_state))
+        rdm_list.append(compute_rdm(response_mean_this, noise_level,
+                                    rng_state=noise_rng_state, method=method))
     final_result = np.array(rdm_list)
     assert final_result.ndim == 2 and final_result.shape[0] == split_k
     return final_result
@@ -159,7 +162,7 @@ def compute_rdm_bounds_batch(ref_rdms_list, similarity_type='spearman'):
     return lower_bound_array, upper_bound_array
 
 
-def compute_rdm(X, noise_level=None, rng_state=None):
+def compute_rdm(X, noise_level=None, rng_state=None, method='scipy'):
     """
 
     Parameters
@@ -167,6 +170,7 @@ def compute_rdm(X, noise_level=None, rng_state=None):
     X: ndarray
     noise_level
     rng_state
+    method
 
     Returns
     -------
@@ -178,7 +182,17 @@ def compute_rdm(X, noise_level=None, rng_state=None):
     if rng_state is None:
         rng_state = np.random.RandomState(None)
     _X = X + noise_level * rng_state.randn(*X.shape) if noise_level != 0.0 else X
-    result = pdist(_X, metric='correlation')
+    if method == 'scipy':
+        result = pdist(_X, metric='correlation')
+    elif method == 'sklearn':
+        # parallel.
+        result = pairwise_distances(_X, metric='correlation', n_jobs=-1)
+        if not np.allclose(result, result.T):
+            print(abs(result-result.T).max())
+            raise RuntimeError('too big error!')
+        result = squareform(result, checks=False)
+    else:
+        raise RuntimeError('no such method!')
     assert np.all(np.isfinite(result)), "I can't allow invalid values in RDM"
     return result
 
