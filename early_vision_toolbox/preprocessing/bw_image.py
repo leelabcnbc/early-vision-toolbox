@@ -9,6 +9,7 @@ from functools import partial
 from copy import deepcopy
 from ..util import make_2d_input_matrix
 from numpy.fft import fft2, ifft2, fftshift, ifftshift
+from joblib import Parallel, delayed
 
 FunctionTransformer = partial(FunctionTransformer, validate=False)  # turn off all validation.
 
@@ -54,10 +55,9 @@ def get_grid_portions(images, row_grid, col_grid, patchsize, offset='c'):
 def whiten_olsh_lee(images, f_0=None, central_clip=(None, None), normalize_pre=True, normalize_post=True,
                     no_filter=False):
     print("doing 1 over f whitening...")
-    new_image_list = []
-    for image in images:
-        new_image_list.append(whiten_olsh_lee_inner(image, f_0, central_clip, normalize_pre, normalize_post,
-                                                    no_filter))
+    new_image_list = Parallel(n_jobs=-1, verbose=5)(
+        delayed(whiten_olsh_lee_inner)(image, f_0, central_clip, normalize_pre, normalize_post,
+                                       no_filter) for image in images)
     return np.array(new_image_list)  # return as a 3d array.
 
 
