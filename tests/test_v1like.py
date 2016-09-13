@@ -34,13 +34,16 @@ tol = 1e-5
 
 
 class MyTestCase(unittest.TestCase):
+    def setUp(self):
+        np.random.seed(seed=0)
+
     def test_reference_2_legacy(self):
         """compare with reference result of original implementation"""
         image_list = ['./v1like_ref/ec_001_s0.png', './v1like_ref/ec_002_s0.png']
         reference_result = loadmat('./v1like_ref/reference_2_v1like_result.mat')['feature_matrix']
         X = [imread(imagename) for imagename in image_list]
-        #X = loadmat('./v1like_ref/reference_2_v1like_result.mat')['images_after_resize']
-        #print('use old images')
+        # X = loadmat('./v1like_ref/reference_2_v1like_result.mat')['images_after_resize']
+        # print('use old images')
         v1like_instance = v1like.V1Like(pars_baseline='simple', legacy=True, debug=debug)
         with Timer('simple (bw) legacy version'):
             result_legacy = v1like_instance.transform(X)
@@ -281,7 +284,10 @@ class MyTestCase(unittest.TestCase):
                     image_processed_1 = v1like._dimr(image, lsum_ksize, outshape, True)
                 with Timer('local norm 2d new'):
                     image_processed_2 = v1like._dimr(image, lsum_ksize, outshape, False)
-                self.assertTrue(np.allclose(image_processed_1, image_processed_2, atol=tol))
+                # if abs(image_processed_1-image_processed_2).max() > 1e-5:
+                #     print(abs(image_processed_1-image_processed_2).max())
+                #     exit()
+                self.assertTrue(np.allclose(image_processed_1, image_processed_2, atol=1e-5))
                 self.assertEqual(image_processed_1.shape, image_processed_2.shape)
 
     def test_filter(self):
@@ -324,4 +330,4 @@ class MyTestCase(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(failfast=True)

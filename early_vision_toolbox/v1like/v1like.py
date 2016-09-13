@@ -101,12 +101,28 @@ def _get_gabor_filters(params, legacy=False):
 
         nf = len(orients) * len(freqs) * len(phases)
         fbshape = nf, fh, fw
-        sigma = fh / 5.
+        sigma = fh / params.get('sigma_factor', 5)
         filt_l = [gabor2d(sigma, freq, orient,
                           phase, fh) for freq, orient, phase in product(freqs, orients, phases)]
         filt_l = np.array(filt_l)
         assert filt_l.shape == fbshape
     return filt_l
+
+
+def _activ(response, activ_params):
+    if activ_params['type'] == 'clamp':
+        response = response.clip(activ_params['minout'], activ_params['maxout'])
+    elif activ_params['type'] == 'square':
+        response **= 2
+    elif activ_params['type'] == 'exp':
+        response = np.exp(response)
+    elif activ_params['type'] == 'recsquare':
+        response[response < 0] = 0
+        response **= 2
+    elif activ_params['type'] == 'rec':
+        response[response < 0] = 0
+
+    return response
 
 
 def gabor2d(sigma, wfreq, worient, wphase, size, normalize=True):
@@ -211,6 +227,7 @@ def default_pars(type='simple_plus'):
             'minout': 0,
             # maximum output (clamp)
             'maxout': 1,
+            'type': 'clamp',  # can also be `square`, `exp`, `recsquare`, `rec`
         },
 
         # - output local normalization
@@ -363,7 +380,8 @@ def _part_generate_repr(img, steps, params, featsel, filt_l, legacy=True, debug=
         print("imga2, shape {}, mean {}, std {}".format(imga2.shape, imga2.mean(), imga2.std()))
 
     if 'activ' in steps:
-        response = response.clip(params['activ']['minout'], params['activ']['maxout'])
+        # 'type': 'clamp',  # can also be `square`, `exp`, `recsquare`, `rec`
+        response = _activ(response, params['activ'])
     imga3 = response.copy()
     if debug:
         print("imga3, shape {}, mean {}, std {}".format(imga3.shape, imga3.mean(), imga3.std()))
