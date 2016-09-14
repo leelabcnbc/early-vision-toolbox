@@ -669,9 +669,12 @@ def _dimr(im, lsum_ksize, outshape, legacy=False):
     if legacy:
         result = v1s_funcs.v1s_dimr(im, lsum_ksize, outshape)
     else:
-        assert lsum_ksize % 2 == 1, "must be odd size!"
-        filtered_im = lsum_ksize * lsum_ksize * uniform_filter(im, size=(lsum_ksize, lsum_ksize, 1),
-                                                               mode='constant')
+        if lsum_ksize is not None:  # so don't do reduction.
+            assert lsum_ksize % 2 == 1, "must be odd size!"
+            filtered_im = lsum_ksize * lsum_ksize * uniform_filter(im, size=(lsum_ksize, lsum_ksize, 1),
+                                                                   mode='constant')
+        else:
+            filtered_im = im
         inh, inw = filtered_im.shape[:2]
         outh, outw = outshape
         assert (outh is None and outw is None) or (outh is not None and outw is not None)
